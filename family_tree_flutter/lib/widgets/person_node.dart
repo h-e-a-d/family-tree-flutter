@@ -8,15 +8,17 @@ class PersonNode extends StatefulWidget {
   final Function(Person) onUpdate;
   final double fontSize;
   final Color fontColor;
+  final String fontFamily;
 
   const PersonNode({
-    Key? key,
+    super.key,
     required this.person,
     required this.allPeople,
     required this.onUpdate,
     required this.fontSize,
     required this.fontColor,
-  }) : super(key: key);
+    required this.fontFamily,
+  });
 
   @override
   State<PersonNode> createState() => _PersonNodeState();
@@ -60,14 +62,31 @@ class _PersonNodeState extends State<PersonNode> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(widget.person.fullName,
-                    style: TextStyle(
-                      fontSize: widget.fontSize,
-                      fontWeight: FontWeight.bold,
-                      color: widget.fontColor,
-                    )),
-                Text(widget.person.dob, style: TextStyle(fontSize: widget.fontSize, color: widget.fontColor)),
-                Text(widget.person.gender, style: TextStyle(fontSize: widget.fontSize, color: widget.fontColor)),
+                Text(
+                  widget.person.fullName,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: widget.fontSize,
+                    color: widget.fontColor,
+                    fontFamily: widget.fontFamily,
+                  ),
+                ),
+                Text(
+                  widget.person.dob,
+                  style: TextStyle(
+                    fontSize: widget.fontSize - 2,
+                    color: widget.fontColor,
+                    fontFamily: widget.fontFamily,
+                  ),
+                ),
+                Text(
+                  widget.person.gender,
+                  style: TextStyle(
+                    fontSize: widget.fontSize - 4,
+                    color: widget.fontColor,
+                    fontFamily: widget.fontFamily,
+                  ),
+                ),
               ],
             ),
           ),

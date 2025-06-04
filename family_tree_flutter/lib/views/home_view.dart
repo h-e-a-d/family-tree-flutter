@@ -2,10 +2,11 @@ import 'dart:ui' as ui;
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:printing/printing.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 import '../models/person.dart';
 import '../widgets/person_node.dart';
+import '../widgets/settings_panel.dart';
 
 class HomeView extends StatefulWidget {
   const HomeView({super.key});
@@ -19,6 +20,7 @@ class _HomeViewState extends State<HomeView> {
   bool isTableView = false;
   double fontSize = 14;
   Color fontColor = Colors.black;
+  String fontFamily = 'Arial';
   final GlobalKey repaintKey = GlobalKey();
 
   void _addPerson() {
@@ -32,9 +34,7 @@ class _HomeViewState extends State<HomeView> {
       gender: 'unknown',
       position: Offset(100 + people.length * 50, 100),
     );
-    setState(() {
-      people.add(person);
-    });
+    setState(() => people.add(person));
   }
 
   void _updatePerson(Person updated) {
@@ -48,7 +48,6 @@ class _HomeViewState extends State<HomeView> {
     RenderRepaintBoundary boundary =
         repaintKey.currentContext?.findRenderObject() as RenderRepaintBoundary;
     if (boundary == null) return null;
-
     final image = await boundary.toImage(pixelRatio: 3.0);
     final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
     return byteData?.buffer.asUint8List();
@@ -82,28 +81,20 @@ class _HomeViewState extends State<HomeView> {
           IconButton(
             icon: Icon(isTableView ? Icons.account_tree : Icons.table_chart),
             tooltip: 'Toggle View',
-            onPressed: () {
+            onPressed: () => setState(() => isTableView = !isTableView),
+          ),
+          SettingsPanel(
+            fontSize: fontSize,
+            fontColor: fontColor,
+            fontFamily: fontFamily,
+            onChanged: (size, color, family) {
               setState(() {
-                isTableView = !isTableView;
+                fontSize = size;
+                fontColor = color;
+                fontFamily = family;
               });
             },
           ),
-          PopupMenuButton<String>(
-            onSelected: (val) {
-              if (val == 'Increase Font') setState(() => fontSize += 2);
-              if (val == 'Decrease Font') setState(() => fontSize = (fontSize - 2).clamp(8, 40));
-              if (val == 'Color: Red') setState(() => fontColor = Colors.red);
-              if (val == 'Color: Blue') setState(() => fontColor = Colors.blue);
-              if (val == 'Color: Black') setState(() => fontColor = Colors.black);
-            },
-            itemBuilder: (ctx) => [
-              PopupMenuItem(value: 'Increase Font', child: Text('Increase Font')),
-              PopupMenuItem(value: 'Decrease Font', child: Text('Decrease Font')),
-              PopupMenuItem(value: 'Color: Red', child: Text('Font Color: Red')),
-              PopupMenuItem(value: 'Color: Blue', child: Text('Font Color: Blue')),
-              PopupMenuItem(value: 'Color: Black', child: Text('Font Color: Black')),
-            ],
-          )
         ],
       ),
       body: isTableView ? _buildTableView() : _buildTreeView(),
@@ -119,15 +110,50 @@ class _HomeViewState extends State<HomeView> {
     return RepaintBoundary(
       key: repaintKey,
       child: Stack(
-        children: people.map<Widget>((person) {
-          return PersonNode(
-            person: person,
-            allPeople: people,
-            onUpdate: _updatePerson,
-            fontSize: fontSize,
-            fontColor: fontColor,
-          );
-        }).toList(),
+        children: [
+          ..._buildRelationshipLines(),
+          ...people.map((person) => PersonNode(
+                person: person,
+                allPeople: people,
+                onUpdate: _updatePerson,
+                fontSize: fontSize,
+                fontColor: fontColor,
+                fontFamily: fontFamily,
+              )),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildRelationshipLines() {
+    return people.expand((person) {
+      final lines = <Widget>[];
+      final spouse = people.firstWhere(
+        (p) => p.id == person.spouseId,
+        orElse: () => Person(id: '', name: '', surname: '', birthName: '', fatherName: '', dob: '', gender: '', position: Offset.zero),
+      );
+      if (spouse.id.isNotEmpty) {
+        lines.add(_buildLine(person.position, spouse.position, color: Colors.red, dashed: true));
+      }
+      final parents = [
+        if (person.fatherId != null)
+          people.firstWhere((p) => p.id == person.fatherId, orElse: () => Person(id: '', name: '', surname: '', birthName: '', fatherName: '', dob: '', gender: '', position: Offset.zero)),
+        if (person.motherId != null)
+          people.firstWhere((p) => p.id == person.motherId, orElse: () => Person(id: '', name: '', surname: '', birthName: '', fatherName: '', dob: '', gender: '', position: Offset.zero)),
+      ];
+      for (final parent in parents) {
+        if (parent.id.isNotEmpty) {
+          lines.add(_buildLine(parent.position, person.position, color: Colors.black));
+        }
+      }
+      return lines;
+    }).toList();
+  }
+
+  Widget _buildLine(Offset from, Offset to, {Color color = Colors.black, bool dashed = false}) {
+    return Positioned.fill(
+      child: CustomPaint(
+        painter: _ConnectorPainter(from: from, to: to, color: color, dashed: dashed),
       ),
     );
   }
@@ -153,4 +179,46 @@ class _HomeViewState extends State<HomeView> {
       ),
     );
   }
+}
+
+class _ConnectorPainter extends CustomPainter {
+  final Offset from;
+  final Offset to;
+  final Color color;
+  final bool dashed;
+
+  _ConnectorPainter({required this.from, required this.to, required this.color, this.dashed = false});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 2
+      ..style = PaintingStyle.stroke;
+
+    if (dashed) {
+      const dashWidth = 5.0;
+      const dashSpace = 3.0;
+      final dx = to.dx - from.dx;
+      final dy = to.dy - from.dy;
+      final distance = (dx * dx + dy * dy).sqrt();
+      final steps = distance ~/ (dashWidth + dashSpace);
+      for (int i = 0; i < steps; i++) {
+        final start = Offset(
+          from.dx + (dx / steps) * i,
+          from.dy + (dy / steps) * i,
+        );
+        final end = Offset(
+          from.dx + (dx / steps) * i + dashWidth,
+          from.dy + (dy / steps) * i + dashWidth,
+        );
+        canvas.drawLine(start, end, paint);
+      }
+    } else {
+      canvas.drawLine(from, to, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(CustomPainter oldDelegate) => true;
 }
