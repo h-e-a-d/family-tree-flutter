@@ -8,7 +8,9 @@ plugins {
 android {
     namespace = "com.example.family_tree_flutter"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+
+    // Use NDK r27 to satisfy the printing plugin’s requirement:
+    ndkVersion = "27.0.12077973"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
