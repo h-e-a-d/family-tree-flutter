@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 class Person {
   final String id;
   String name;
+  String surname;
+  String birthName;
+  String fatherName;
   String dob;
   String gender;
   Offset position;
@@ -13,6 +16,9 @@ class Person {
   Person({
     required this.id,
     required this.name,
+    required this.surname,
+    required this.birthName,
+    required this.fatherName,
     required this.dob,
     required this.gender,
     required this.position,
@@ -20,4 +26,6 @@ class Person {
     this.fatherId,
     this.spouseId,
   });
+
+  String get fullName => '$name $surname';
 }
