@@ -9,6 +9,7 @@ class PersonNode extends StatefulWidget {
   final double fontSize;
   final Color fontColor;
   final String fontFamily;
+  final bool isSelected;
 
   const PersonNode({
     super.key,
@@ -18,6 +19,7 @@ class PersonNode extends StatefulWidget {
     required this.fontSize,
     required this.fontColor,
     required this.fontFamily,
+    this.isSelected = false,
   });
 
   @override
@@ -26,6 +28,7 @@ class PersonNode extends StatefulWidget {
 
 class _PersonNodeState extends State<PersonNode> {
   late Offset position;
+  bool _isHighlighted = false;
 
   @override
   void initState() {
@@ -36,9 +39,12 @@ class _PersonNodeState extends State<PersonNode> {
   @override
   Widget build(BuildContext context) {
     return Positioned(
-      left: position.dx,
-      top: position.dy,
+      left: position.dx - widget.person.radius,
+      top: position.dy - widget.person.radius,
       child: GestureDetector(
+        onTap: () {
+          setState(() => _isHighlighted = !_isHighlighted);
+        },
         onDoubleTap: () async {
           await showPersonModal(
             context: context,
@@ -55,17 +61,24 @@ class _PersonNodeState extends State<PersonNode> {
             widget.onUpdate(widget.person);
           });
         },
-        child: Card(
-          elevation: 4,
-          child: Padding(
-            padding: const EdgeInsets.all(8.0),
+        child: CustomPaint(
+          painter: _CirclePainter(
+            color: widget.isSelected || _isHighlighted
+                ? Colors.yellow
+                : Colors.blue,
+            radius: widget.person.radius,
+          ),
+          child: SizedBox(
+            width: widget.person.radius * 2,
+            height: widget.person.radius * 2 + (widget.fontSize * 2),
             child: Column(
-              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
+                Spacer(),
                 Text(
                   widget.person.fullName,
+                  textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontWeight: FontWeight.bold,
                     fontSize: widget.fontSize,
                     color: widget.fontColor,
                     fontFamily: widget.fontFamily,
@@ -73,6 +86,7 @@ class _PersonNodeState extends State<PersonNode> {
                 ),
                 Text(
                   widget.person.dob,
+                  textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: widget.fontSize - 2,
                     color: widget.fontColor,
@@ -81,6 +95,7 @@ class _PersonNodeState extends State<PersonNode> {
                 ),
                 Text(
                   widget.person.gender,
+                  textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: widget.fontSize - 4,
                     color: widget.fontColor,
@@ -94,4 +109,20 @@ class _PersonNodeState extends State<PersonNode> {
       ),
     );
   }
+}
+
+class _CirclePainter extends CustomPainter {
+  final Color color;
+  final double radius;
+
+  _CirclePainter({required this.color, required this.radius});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = color.withOpacity(0.5);
+    canvas.drawCircle(Offset(radius, radius), radius, paint);
+  }
+
+  @override
+  bool shouldRepaint(CustomPainter oldDelegate) => true;
 }

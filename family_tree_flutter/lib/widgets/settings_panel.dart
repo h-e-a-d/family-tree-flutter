@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-class SettingsPanel extends StatelessWidget {
+class SettingsPanel extends StatefulWidget {
   final double fontSize;
   final Color fontColor;
   final String fontFamily;
@@ -15,35 +15,133 @@ class SettingsPanel extends StatelessWidget {
   });
 
   @override
+  State<SettingsPanel> createState() => _SettingsPanelState();
+}
+
+class _SettingsPanelState extends State<SettingsPanel> {
+  late TextEditingController _sizeController;
+  late Color _color;
+  late String _family;
+
+  final List<String> _families = [
+    'Arial',
+    'Times New Roman',
+    'Roboto',
+    'Open Sans',
+    'Lato',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _sizeController =
+        TextEditingController(text: widget.fontSize.toInt().toString());
+    _color = widget.fontColor;
+    _family = widget.fontFamily;
+  }
+
+  @override
+  void dispose() {
+    _sizeController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return PopupMenuButton<String>(
+    return PopupMenuButton<int>(
       icon: Icon(Icons.settings),
-      tooltip: 'Font Settings',
-      onSelected: (value) {
-        double newSize = fontSize;
-        Color newColor = fontColor;
-        String newFamily = fontFamily;
-
-        if (value == 'font_inc') newSize += 2;
-        if (value == 'font_dec') newSize = (fontSize - 2).clamp(8, 40);
-        if (value == 'color_red') newColor = Colors.red;
-        if (value == 'color_blue') newColor = Colors.blue;
-        if (value == 'color_black') newColor = Colors.black;
-        if (value == 'font_arial') newFamily = 'Arial';
-        if (value == 'font_times') newFamily = 'Times New Roman';
-
-        onChanged(newSize, newColor, newFamily);
+      tooltip: 'Font & Import/Export',
+      onSelected: (value) async {
+        // Handled inside each menu item via setState
       },
-      itemBuilder: (context) => [
-        PopupMenuItem(value: 'font_inc', child: Text('Font Size +')),
-        PopupMenuItem(value: 'font_dec', child: Text('Font Size -')),
+      itemBuilder: (ctx) => [
+        PopupMenuItem(
+          child: Row(
+            children: [
+              SizedBox(
+                width: 50,
+                child: TextField(
+                  controller: _sizeController,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(labelText: 'Font size'),
+                  onSubmitted: (v) {
+                    final newSize = double.tryParse(v) ?? widget.fontSize;
+                    widget.onChanged(newSize, _color, _family);
+                  },
+                ),
+              ),
+              SizedBox(width: 10),
+              Text('px'),
+            ],
+          ),
+        ),
         PopupMenuDivider(),
-        PopupMenuItem(value: 'color_red', child: Text('Red Text')),
-        PopupMenuItem(value: 'color_blue', child: Text('Blue Text')),
-        PopupMenuItem(value: 'color_black', child: Text('Black Text')),
+        PopupMenuItem(
+          child: Row(
+            children: [
+              Text('Color: '),
+              DropdownButton<Color>(
+                value: _color,
+                items: [
+                  DropdownMenuItem(
+                    value: Colors.black,
+                    child: Text('Black', style: TextStyle(color: Colors.black)),
+                  ),
+                  DropdownMenuItem(
+                    value: Colors.red,
+                    child: Text('Red', style: TextStyle(color: Colors.red)),
+                  ),
+                  DropdownMenuItem(
+                    value: Colors.blue,
+                    child: Text('Blue', style: TextStyle(color: Colors.blue)),
+                  ),
+                ],
+                onChanged: (c) {
+                  if (c == null) return;
+                  setState(() => _color = c);
+                  widget.onChanged(widget.fontSize, _color, _family);
+                },
+              ),
+            ],
+          ),
+        ),
         PopupMenuDivider(),
-        PopupMenuItem(value: 'font_arial', child: Text('Arial')),
-        PopupMenuItem(value: 'font_times', child: Text('Times New Roman')),
+        PopupMenuItem(
+          child: Row(
+            children: [
+              Text('Font: '),
+              DropdownButton<String>(
+                value: _family,
+                items: _families
+                    .map((f) => DropdownMenuItem(
+                          value: f,
+                          child: Text(f, style: TextStyle(fontFamily: f)),
+                        ))
+                    .toList(),
+                onChanged: (f) {
+                  if (f == null) return;
+                  setState(() => _family = f);
+                  widget.onChanged(widget.fontSize, _color, _family);
+                },
+              ),
+            ],
+          ),
+        ),
+        PopupMenuDivider(),
+        PopupMenuItem(
+          value: 1,
+          child: Text('Export JSON'),
+          onTap: () {
+            // Handled in HomeView via callback
+          },
+        ),
+        PopupMenuItem(
+          value: 2,
+          child: Text('Import JSON'),
+          onTap: () {
+            // Handled in HomeView via callback
+          },
+        ),
       ],
     );
   }
