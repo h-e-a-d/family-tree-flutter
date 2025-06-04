@@ -6,7 +6,7 @@ class PersonNode extends StatefulWidget {
   final Person person;
   final Function(Person) onUpdate;
 
-  const PersonNode({super.key, 
+  const PersonNode({
     required this.person,
     required this.onUpdate,
   });
@@ -24,7 +24,7 @@ class _PersonNodeState extends State<PersonNode> {
     position = widget.person.position;
   }
 
-  void _onDrag(details) {
+  void _onDrag(DragUpdateDetails details) {
     setState(() {
       position += details.delta;
     });
@@ -37,7 +37,7 @@ class _PersonNodeState extends State<PersonNode> {
       person: widget.person,
       onSave: widget.onUpdate,
     );
-    setState(() {}); // Refresh node text
+    setState(() {}); // Refresh display after edit
   }
 
   @override
@@ -48,13 +48,17 @@ class _PersonNodeState extends State<PersonNode> {
       child: GestureDetector(
         onPanUpdate: _onDrag,
         onDoubleTap: _editPerson,
+        onTap: () => print('Tapped ${widget.person.name}'),
+        behavior: HitTestBehavior.translucent,
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
             CircleAvatar(
               radius: 30,
-              child: Text(widget.person.name.isNotEmpty
-                  ? widget.person.name[0]
-                  : '?'),
+              child: Text(
+                widget.person.name.isNotEmpty ? widget.person.name[0] : '?',
+                style: TextStyle(fontSize: 20),
+              ),
             ),
             Text(widget.person.name),
             if (widget.person.dob.isNotEmpty)
