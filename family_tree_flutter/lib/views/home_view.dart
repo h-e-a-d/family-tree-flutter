@@ -1,5 +1,6 @@
 import 'dart:ui' as ui;
 import 'dart:typed_data';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -128,6 +129,8 @@ class _HomeViewState extends State<HomeView> {
   List<Widget> _buildRelationshipLines() {
     return people.expand((person) {
       final lines = <Widget>[];
+
+      // Spouse connector
       final spouse = people.firstWhere(
         (p) => p.id == person.spouseId,
         orElse: () => Person(id: '', name: '', surname: '', birthName: '', fatherName: '', dob: '', gender: '', position: Offset.zero),
@@ -135,6 +138,8 @@ class _HomeViewState extends State<HomeView> {
       if (spouse.id.isNotEmpty) {
         lines.add(_buildLine(person.position, spouse.position, color: Colors.red, dashed: true));
       }
+
+      // Parent-child connectors
       final parents = [
         if (person.fatherId != null)
           people.firstWhere((p) => p.id == person.fatherId, orElse: () => Person(id: '', name: '', surname: '', birthName: '', fatherName: '', dob: '', gender: '', position: Offset.zero)),
@@ -146,6 +151,7 @@ class _HomeViewState extends State<HomeView> {
           lines.add(_buildLine(parent.position, person.position, color: Colors.black));
         }
       }
+
       return lines;
     }).toList();
   }
@@ -201,7 +207,7 @@ class _ConnectorPainter extends CustomPainter {
       const dashSpace = 3.0;
       final dx = to.dx - from.dx;
       final dy = to.dy - from.dy;
-      final distance = (dx * dx + dy * dy).sqrt();
+      final distance = sqrt(dx * dx + dy * dy);
       final steps = distance ~/ (dashWidth + dashSpace);
       for (int i = 0; i < steps; i++) {
         final start = Offset(
