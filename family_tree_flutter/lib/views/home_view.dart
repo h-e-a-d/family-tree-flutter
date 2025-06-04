@@ -64,13 +64,13 @@ class _HomeViewState extends State<HomeView> {
 
   Widget _buildTreeView() {
     return Stack(
-      children: people
-          .map((person) => PersonNode(
-                person: person,
-                allPeople: people,
-                onUpdate: _updatePerson,
-              ))
-          .toList(),
+      children: people.map<Widget>((person) {
+        return PersonNode(
+          person: person,
+          allPeople: people,
+          onUpdate: _updatePerson,
+        );
+      }).toList(),
     );
   }
 
