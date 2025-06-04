@@ -1,13 +1,15 @@
 {
   "name": "Flutter Web Dev",
-  "image": "dartcode/flutter",
-  "postCreateCommand": "flutter config --enable-web && flutter pub get",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "postCreateCommand": "flutter config --enable-web && flutter doctor",
   "customizations": {
     "vscode": {
-      "extensions": ["dart-code.flutter"]
+      "extensions": [
+        "dart-code.flutter",
+        "dart-code.dart-code"
+      ]
     }
-  },
-  "features": {
-    "ghcr.io/devcontainers/features/docker-in-docker:1": {}
   }
 }
