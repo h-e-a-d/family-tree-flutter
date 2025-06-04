@@ -1,19 +1,20 @@
-// lib/views/home_view.dart
 import 'package:flutter/material.dart';
 import '../models/person.dart';
 import '../widgets/person_node.dart';
 
 class HomeView extends StatefulWidget {
+  const HomeView({super.key});
+
   @override
-  _HomeViewState createState() => _HomeViewState();
+  State<HomeView> createState() => _HomeViewState();
 }
 
 class _HomeViewState extends State<HomeView> {
   List<Person> people = [];
-  bool showTable = false;
+  bool isTableView = false;
 
   void _addPerson() {
-    final newPerson = Person(
+    final person = Person(
       id: DateTime.now().toIso8601String(),
       name: 'New',
       surname: 'Person',
@@ -24,26 +25,52 @@ class _HomeViewState extends State<HomeView> {
       position: Offset(100 + people.length * 50, 100),
     );
     setState(() {
-      people.add(newPerson);
+      people.add(person);
     });
   }
 
-  void _updatePerson(Person updatedPerson) {
+  void _updatePerson(Person updated) {
     setState(() {
-      final index = people.indexWhere((p) => p.id == updatedPerson.id);
-      if (index != -1) people[index] = updatedPerson;
+      final index = people.indexWhere((p) => p.id == updated.id);
+      if (index != -1) people[index] = updated;
     });
   }
 
-  Widget _buildCanvasView() {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Family Tree Builder'),
+        actions: [
+          IconButton(
+            icon: Icon(isTableView ? Icons.account_tree : Icons.table_chart),
+            tooltip: 'Toggle View',
+            onPressed: () {
+              setState(() {
+                isTableView = !isTableView;
+              });
+            },
+          ),
+        ],
+      ),
+      body: isTableView ? _buildTableView() : _buildTreeView(),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _addPerson,
+        tooltip: 'Add Person',
+        child: Icon(Icons.add),
+      ),
+    );
+  }
+
+  Widget _buildTreeView() {
     return Stack(
-      children: [
-        ...people.map((person) => PersonNode(
-              person: person,
-              allPeople: people,
-              onUpdate: _updatePerson,
-            )),
-      ],
+      children: people
+          .map((person) => PersonNode(
+                person: person,
+                allPeople: people,
+                onUpdate: _updatePerson,
+              ))
+          .toList(),
     );
   }
 
@@ -57,35 +84,15 @@ class _HomeViewState extends State<HomeView> {
           DataColumn(label: Text('DOB')),
           DataColumn(label: Text('Gender')),
         ],
-        rows: people.map((p) {
+        rows: people.map((person) {
           return DataRow(cells: [
-            DataCell(Text(p.name)),
-            DataCell(Text(p.surname)),
-            DataCell(Text(p.dob)),
-            DataCell(Text(p.gender)),
+            DataCell(Text(person.name)),
+            DataCell(Text(person.surname)),
+            DataCell(Text(person.dob)),
+            DataCell(Text(person.gender)),
           ]);
         }).toList(),
       ),
     );
   }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Family Tree'),
-        actions: [
-          IconButton(
-            icon: Icon(showTable ? Icons.account_tree : Icons.table_chart),
-            onPressed: () => setState(() => showTable = !showTable),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _addPerson,
-        child: Icon(Icons.add),
-      ),
-      body: showTable ? _buildTableView() : _buildCanvasView(),
-    );
-  }
-} 
+}

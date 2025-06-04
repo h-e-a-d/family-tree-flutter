@@ -63,25 +63,31 @@ Future<void> showPersonModal({
                     .toList(),
               ),
               DropdownButtonFormField<String>(
-                value: selectedMotherId,
+                value: selectedMotherId ?? '',
                 decoration: InputDecoration(labelText: 'Mother'),
-                onChanged: (value) => selectedMotherId = value,
-                items: [DropdownMenuItem(value: null, child: Text('None'))] +
-                    dropdownItems,
+                onChanged: (value) => selectedMotherId = (value == '') ? null : value,
+                items: [
+                  const DropdownMenuItem<String>(value: '', child: Text('None')),
+                  ...dropdownItems
+                ],
               ),
               DropdownButtonFormField<String>(
-                value: selectedFatherId,
+                value: selectedFatherId ?? '',
                 decoration: InputDecoration(labelText: 'Father'),
-                onChanged: (value) => selectedFatherId = value,
-                items: [DropdownMenuItem(value: null, child: Text('None'))] +
-                    dropdownItems,
+                onChanged: (value) => selectedFatherId = (value == '') ? null : value,
+                items: [
+                  const DropdownMenuItem<String>(value: '', child: Text('None')),
+                  ...dropdownItems
+                ],
               ),
               DropdownButtonFormField<String>(
-                value: selectedSpouseId,
+                value: selectedSpouseId ?? '',
                 decoration: InputDecoration(labelText: 'Spouse'),
-                onChanged: (value) => selectedSpouseId = value,
-                items: [DropdownMenuItem(value: null, child: Text('None'))] +
-                    dropdownItems,
+                onChanged: (value) => selectedSpouseId = (value == '') ? null : value,
+                items: [
+                  const DropdownMenuItem<String>(value: '', child: Text('None')),
+                  ...dropdownItems
+                ],
               ),
             ],
           ),
