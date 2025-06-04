@@ -74,7 +74,7 @@ class _PersonNodeState extends State<PersonNode> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Spacer(),
+                const Spacer(),
                 Text(
                   widget.person.fullName,
                   textAlign: TextAlign.center,

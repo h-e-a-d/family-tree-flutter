@@ -30,33 +30,33 @@ Future<void> showPersonModal({
     context: context,
     builder: (ctx) {
       return AlertDialog(
-        title: Text('Edit Person'),
+        title: const Text('Edit Person'),
         content: SingleChildScrollView(
           child: Column(
             children: [
               TextField(
                 controller: nameController,
-                decoration: InputDecoration(labelText: 'First Name'),
+                decoration: const InputDecoration(labelText: 'First Name'),
               ),
               TextField(
                 controller: surnameController,
-                decoration: InputDecoration(labelText: 'Surname'),
+                decoration: const InputDecoration(labelText: 'Surname'),
               ),
               TextField(
                 controller: birthNameController,
-                decoration: InputDecoration(labelText: 'Birth Name'),
+                decoration: const InputDecoration(labelText: 'Birth Name'),
               ),
               TextField(
                 controller: fatherNameController,
-                decoration: InputDecoration(labelText: "Father's Name"),
+                decoration: const InputDecoration(labelText: "Father's Name"),
               ),
               TextField(
                 controller: dobController,
-                decoration: InputDecoration(labelText: 'Date of Birth'),
+                decoration: const InputDecoration(labelText: 'Date of Birth'),
               ),
               DropdownButtonFormField<String>(
                 value: gender,
-                decoration: InputDecoration(labelText: 'Gender'),
+                decoration: const InputDecoration(labelText: 'Gender'),
                 onChanged: (value) => gender = value ?? 'unknown',
                 items: ['unknown', 'male', 'female']
                     .map((g) => DropdownMenuItem(value: g, child: Text(g)))
@@ -64,7 +64,7 @@ Future<void> showPersonModal({
               ),
               DropdownButtonFormField<String>(
                 value: selectedMotherId ?? '',
-                decoration: InputDecoration(labelText: 'Mother'),
+                decoration: const InputDecoration(labelText: 'Mother'),
                 onChanged: (value) => selectedMotherId = (value == '') ? null : value,
                 items: [
                   const DropdownMenuItem<String>(value: '', child: Text('None')),
@@ -73,7 +73,7 @@ Future<void> showPersonModal({
               ),
               DropdownButtonFormField<String>(
                 value: selectedFatherId ?? '',
-                decoration: InputDecoration(labelText: 'Father'),
+                decoration: const InputDecoration(labelText: 'Father'),
                 onChanged: (value) => selectedFatherId = (value == '') ? null : value,
                 items: [
                   const DropdownMenuItem<String>(value: '', child: Text('None')),
@@ -82,7 +82,7 @@ Future<void> showPersonModal({
               ),
               DropdownButtonFormField<String>(
                 value: selectedSpouseId ?? '',
-                decoration: InputDecoration(labelText: 'Spouse'),
+                decoration: const InputDecoration(labelText: 'Spouse'),
                 onChanged: (value) => selectedSpouseId = (value == '') ? null : value,
                 items: [
                   const DropdownMenuItem<String>(value: '', child: Text('None')),
@@ -95,7 +95,7 @@ Future<void> showPersonModal({
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: Text('Cancel'),
+            child: const Text('Cancel'),
           ),
           ElevatedButton(
             onPressed: () {
@@ -111,7 +111,7 @@ Future<void> showPersonModal({
               onSave(person);
               Navigator.of(ctx).pop();
             },
-            child: Text('Save'),
+            child: const Text('Save'),
           ),
         ],
       );

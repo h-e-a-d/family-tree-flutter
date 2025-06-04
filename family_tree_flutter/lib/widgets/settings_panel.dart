@@ -49,7 +49,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
   @override
   Widget build(BuildContext context) {
     return PopupMenuButton<int>(
-      icon: Icon(Icons.settings),
+      icon: const Icon(Icons.settings),
       tooltip: 'Font & Import/Export',
       onSelected: (value) async {
         // Handled inside each menu item via setState
@@ -63,26 +63,26 @@ class _SettingsPanelState extends State<SettingsPanel> {
                 child: TextField(
                   controller: _sizeController,
                   keyboardType: TextInputType.number,
-                  decoration: InputDecoration(labelText: 'Font size'),
+                  decoration: const InputDecoration(labelText: 'Font size'),
                   onSubmitted: (v) {
                     final newSize = double.tryParse(v) ?? widget.fontSize;
                     widget.onChanged(newSize, _color, _family);
                   },
                 ),
               ),
-              SizedBox(width: 10),
-              Text('px'),
+              const SizedBox(width: 10),
+              const Text('px'),
             ],
           ),
         ),
-        PopupMenuDivider(),
+        const PopupMenuDivider(),
         PopupMenuItem(
           child: Row(
             children: [
-              Text('Color: '),
+              const Text('Color: '),
               DropdownButton<Color>(
                 value: _color,
-                items: [
+                items: const [
                   DropdownMenuItem(
                     value: Colors.black,
                     child: Text('Black', style: TextStyle(color: Colors.black)),
@@ -105,11 +105,11 @@ class _SettingsPanelState extends State<SettingsPanel> {
             ],
           ),
         ),
-        PopupMenuDivider(),
+        const PopupMenuDivider(),
         PopupMenuItem(
           child: Row(
             children: [
-              Text('Font: '),
+              const Text('Font: '),
               DropdownButton<String>(
                 value: _family,
                 items: _families
@@ -127,17 +127,17 @@ class _SettingsPanelState extends State<SettingsPanel> {
             ],
           ),
         ),
-        PopupMenuDivider(),
+        const PopupMenuDivider(),
         PopupMenuItem(
           value: 1,
-          child: Text('Export JSON'),
+          child: const Text('Export JSON'),
           onTap: () {
             // Handled in HomeView via callback
           },
         ),
         PopupMenuItem(
           value: 2,
-          child: Text('Import JSON'),
+          child: const Text('Import JSON'),
           onTap: () {
             // Handled in HomeView via callback
           },

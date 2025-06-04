@@ -34,20 +34,20 @@ class _HomeViewState extends State<HomeView> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Family Tree Builder'),
+        title: const Text('Family Tree Builder'),
         actions: [
           IconButton(
-            icon: Icon(Icons.import_export),
+            icon: const Icon(Icons.import_export),
             tooltip: 'Export PNG',
             onPressed: _exportAsPNG,
           ),
           IconButton(
-            icon: Icon(Icons.picture_as_pdf),
+            icon: const Icon(Icons.picture_as_pdf),
             tooltip: 'Export PDF',
             onPressed: _exportAsPDF,
           ),
           IconButton(
-            icon: Icon(Icons.table_chart),
+            icon: const Icon(Icons.table_chart),
             tooltip: 'Toggle Table',
             onPressed: () => setState(() => isTableView = !isTableView),
           ),
@@ -72,13 +72,13 @@ class _HomeViewState extends State<HomeView> {
             },
           ),
           PopupMenuButton<String>(
-            icon: Icon(Icons.more_vert),
+            icon: const Icon(Icons.more_vert),
             onSelected: (val) async {
               if (val == 'export_json') {
                 final json = JsonIO.encodePeople(people);
                 await JsonIO.saveToFile('family_tree.json', json);
                 ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Exported to family_tree.json')));
+                    const SnackBar(content: Text('Exported to family_tree.json')));
               }
               if (val == 'import_json') {
                 final contents = await JsonIO.loadFromFile('family_tree.json');
@@ -87,8 +87,8 @@ class _HomeViewState extends State<HomeView> {
               }
             },
             itemBuilder: (_) => [
-              PopupMenuItem(value: 'export_json', child: Text('Export JSON')),
-              PopupMenuItem(value: 'import_json', child: Text('Import JSON')),
+              const PopupMenuItem(value: 'export_json', child: Text('Export JSON')),
+              const PopupMenuItem(value: 'import_json', child: Text('Import JSON')),
             ],
           ),
         ],
@@ -96,14 +96,14 @@ class _HomeViewState extends State<HomeView> {
       body: isTableView ? _buildTable() : _buildCanvas(),
       floatingActionButton: FloatingActionButton(
         onPressed: _addPerson,
-        child: Icon(Icons.add),
+        child: const Icon(Icons.add),
       ),
     );
   }
 
   Widget _buildCanvas() {
     return InteractiveViewer(
-      boundaryMargin: EdgeInsets.all(200),
+      boundaryMargin: const EdgeInsets.all(200),
       minScale: 0.1,
       maxScale: 2.5,
       child: RepaintBoundary(
@@ -125,7 +125,7 @@ class _HomeViewState extends State<HomeView> {
                   fontFamily: fontFamily,
                   isSelected: isSel,
                 );
-              }).toList(),
+              }),
             ],
           ),
         ),
@@ -226,7 +226,6 @@ class _HomeViewState extends State<HomeView> {
   Future<Uint8List?> _captureImage() async {
     final boundary =
         repaintKey.currentContext?.findRenderObject() as RenderRepaintBoundary;
-    if (boundary == null) return null;
     final image = await boundary.toImage(pixelRatio: 3.0);
     final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
     return byteData?.buffer.asUint8List();

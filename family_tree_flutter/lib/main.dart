@@ -6,6 +6,8 @@ void main() {
 }
 
 class FamilyTreeApp extends StatelessWidget {
+  const FamilyTreeApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -15,7 +17,7 @@ class FamilyTreeApp extends StatelessWidget {
         fontFamily: 'Arial',
         visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
-      home: HomeView(),
+      home: const HomeView(),
     );
   }
 }
