@@ -1,74 +1,72 @@
-import 'dart:html' as html;
-import 'dart:ui' as ui;
+// lib/views/home_view.dart
 import 'package:flutter/material.dart';
 import '../models/person.dart';
 import '../widgets/person_node.dart';
 
 class HomeView extends StatefulWidget {
-  const HomeView({super.key});
-
   @override
   _HomeViewState createState() => _HomeViewState();
 }
 
 class _HomeViewState extends State<HomeView> {
   List<Person> people = [];
+  bool showTable = false;
 
   void _addPerson() {
+    final newPerson = Person(
+      id: DateTime.now().toIso8601String(),
+      name: 'New',
+      surname: 'Person',
+      birthName: '',
+      fatherName: '',
+      dob: '',
+      gender: 'unknown',
+      position: Offset(100 + people.length * 50, 100),
+    );
     setState(() {
-      people.add(
-        Person(
-          id: DateTime.now().toIso8601String(),
-          name: 'New Person',
-          dob: '',
-          gender: 'unknown',
-          position: Offset(100 + people.length * 50, 100),
-        ),
-      );
+      people.add(newPerson);
     });
   }
 
-  void _onUpdatePerson(Person updated) {
+  void _updatePerson(Person updatedPerson) {
     setState(() {
-      final index = people.indexWhere((p) => p.id == updated.id);
-      if (index != -1) people[index] = updated;
+      final index = people.indexWhere((p) => p.id == updatedPerson.id);
+      if (index != -1) people[index] = updatedPerson;
     });
   }
 
-  void _exportAsImage() {
-    final html.Element svg = html.document.querySelector('flt-glass-pane')!;
-    final blob = html.Blob([svg.outerHtml!], 'text/plain', 'native');
-    final url = html.Url.createObjectUrlFromBlob(blob);
-    final anchor = html.AnchorElement(href: url)
-      ..setAttribute("download", "family_tree_export.html")
-      ..click();
-    html.Url.revokeObjectUrl(url);
+  Widget _buildCanvasView() {
+    return Stack(
+      children: [
+        ...people.map((person) => PersonNode(
+              person: person,
+              allPeople: people,
+              onUpdate: _updatePerson,
+            )),
+      ],
+    );
   }
 
-  List<Widget> _buildRelationshipLines() {
-    List<Widget> lines = [];
-
-    for (var person in people) {
-      final from = person.position;
-
-      void drawLineTo(String? id, Color color) {
-        if (id == null) return;
-        final target = people.firstWhere((p) => p.id == id, orElse: () => Person(id: '', name: '', dob: '', gender: '', position: Offset.zero));
-        if (target.id.isEmpty) return;
-
-        lines.add(Positioned.fill(
-          child: CustomPaint(
-            painter: LinePainter(from + Offset(30, 30), target.position + Offset(30, 30), color),
-          ),
-        ));
-      }
-
-      drawLineTo(person.motherId, Colors.pink);
-      drawLineTo(person.fatherId, Colors.blue);
-      drawLineTo(person.spouseId, Colors.green);
-    }
-
-    return lines;
+  Widget _buildTableView() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.vertical,
+      child: DataTable(
+        columns: const [
+          DataColumn(label: Text('Name')),
+          DataColumn(label: Text('Surname')),
+          DataColumn(label: Text('DOB')),
+          DataColumn(label: Text('Gender')),
+        ],
+        rows: people.map((p) {
+          return DataRow(cells: [
+            DataCell(Text(p.name)),
+            DataCell(Text(p.surname)),
+            DataCell(Text(p.dob)),
+            DataCell(Text(p.gender)),
+          ]);
+        }).toList(),
+      ),
+    );
   }
 
   @override
@@ -78,50 +76,16 @@ class _HomeViewState extends State<HomeView> {
         title: Text('Family Tree'),
         actions: [
           IconButton(
-            icon: Icon(Icons.add),
-            tooltip: 'Add Person',
-            onPressed: _addPerson,
+            icon: Icon(showTable ? Icons.account_tree : Icons.table_chart),
+            onPressed: () => setState(() => showTable = !showTable),
           ),
-          IconButton(
-            icon: Icon(Icons.download),
-            tooltip: 'Export as HTML Snapshot',
-            onPressed: _exportAsImage,
-          )
         ],
       ),
-      body: InteractiveViewer(
-        boundaryMargin: EdgeInsets.all(1000),
-        minScale: 0.1,
-        maxScale: 5,
-        child: Stack(
-          children: [
-            ..._buildRelationshipLines(),
-            ...people.map((p) => PersonNode(
-                  person: p,
-                  onUpdate: _onUpdatePerson,
-                )),
-          ],
-        ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _addPerson,
+        child: Icon(Icons.add),
       ),
+      body: showTable ? _buildTableView() : _buildCanvasView(),
     );
   }
-}
-
-class LinePainter extends CustomPainter {
-  final Offset p1;
-  final Offset p2;
-  final Color color;
-
-  LinePainter(this.p1, this.p2, this.color);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..strokeWidth = 2;
-    canvas.drawLine(p1, p2, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
-}
+} 
