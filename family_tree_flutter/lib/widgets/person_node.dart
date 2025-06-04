@@ -6,12 +6,16 @@ class PersonNode extends StatefulWidget {
   final Person person;
   final List<Person> allPeople;
   final Function(Person) onUpdate;
+  final double fontSize;
+  final Color fontColor;
 
   const PersonNode({
     Key? key,
     required this.person,
     required this.allPeople,
     required this.onUpdate,
+    required this.fontSize,
+    required this.fontColor,
   }) : super(key: key);
 
   @override
@@ -56,9 +60,14 @@ class _PersonNodeState extends State<PersonNode> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(widget.person.fullName, style: TextStyle(fontWeight: FontWeight.bold)),
-                Text(widget.person.dob),
-                Text(widget.person.gender),
+                Text(widget.person.fullName,
+                    style: TextStyle(
+                      fontSize: widget.fontSize,
+                      fontWeight: FontWeight.bold,
+                      color: widget.fontColor,
+                    )),
+                Text(widget.person.dob, style: TextStyle(fontSize: widget.fontSize, color: widget.fontColor)),
+                Text(widget.person.gender, style: TextStyle(fontSize: widget.fontSize, color: widget.fontColor)),
               ],
             ),
           ),
