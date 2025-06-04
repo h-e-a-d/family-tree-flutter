@@ -5,7 +5,7 @@ class PersonNode extends StatefulWidget {
   final Person person;
   final Function(Person) onUpdate;
 
-  const PersonNode({
+  const PersonNode({super.key, 
     required this.person,
     required this.onUpdate,
   });

@@ -6,6 +6,8 @@ void main() {
 }
 
 class FamilyTreeApp extends StatelessWidget {
+  const FamilyTreeApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(

@@ -3,6 +3,8 @@ import '../widgets/person_node.dart';
 import '../models/person.dart';
 
 class HomeView extends StatefulWidget {
+  const HomeView({super.key});
+
   @override
   _HomeViewState createState() => _HomeViewState();
 }
