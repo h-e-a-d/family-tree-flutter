@@ -8,7 +8,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  screenshot: ^2.1.0
+  screenshot: 2.1.0
   pdf: ^3.10.4
   printing: ^5.12.0
 
