@@ -5,6 +5,8 @@ import '../models/person.dart';
 import '../widgets/person_node.dart';
 
 class HomeView extends StatefulWidget {
+  const HomeView({super.key});
+
   @override
   _HomeViewState createState() => _HomeViewState();
 }
