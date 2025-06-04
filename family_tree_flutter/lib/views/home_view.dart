@@ -1,6 +1,7 @@
 import 'dart:ui' as ui;
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:printing/printing.dart';
 import 'package:pdf/widgets.dart' as pw;
 import '../models/person.dart';
@@ -18,7 +19,6 @@ class _HomeViewState extends State<HomeView> {
   bool isTableView = false;
   double fontSize = 14;
   Color fontColor = Colors.black;
-
   final GlobalKey repaintKey = GlobalKey();
 
   void _addPerson() {
