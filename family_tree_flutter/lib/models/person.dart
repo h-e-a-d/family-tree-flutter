@@ -6,8 +6,6 @@ class Person {
   String dob;
   String gender;
   Offset position;
-
-  // Relationships
   String? motherId;
   String? fatherId;
   String? spouseId;

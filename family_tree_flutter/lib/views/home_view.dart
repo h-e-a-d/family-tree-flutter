@@ -1,6 +1,8 @@
+import 'dart:html' as html;
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import '../widgets/person_node.dart';
 import '../models/person.dart';
+import '../widgets/person_node.dart';
 
 class HomeView extends StatefulWidget {
   @override
@@ -14,7 +16,7 @@ class _HomeViewState extends State<HomeView> {
     setState(() {
       people.add(
         Person(
-          id: DateTime.now().toString(),
+          id: DateTime.now().toIso8601String(),
           name: 'New Person',
           dob: '',
           gender: 'unknown',
@@ -31,24 +33,25 @@ class _HomeViewState extends State<HomeView> {
     });
   }
 
+  void _exportAsImage() {
+    final html.Element svg = html.document.querySelector('flt-glass-pane')!;
+    final blob = html.Blob([svg.outerHtml!], 'text/plain', 'native');
+    final url = html.Url.createObjectUrlFromBlob(blob);
+    final anchor = html.AnchorElement(href: url)
+      ..setAttribute("download", "family_tree_export.html")
+      ..click();
+    html.Url.revokeObjectUrl(url);
+  }
+
   List<Widget> _buildRelationshipLines() {
     List<Widget> lines = [];
 
     for (var person in people) {
       final from = person.position;
 
-      void addLineTo(String? relatedId, Color color) {
-        if (relatedId == null) return;
-        final target = people.firstWhere(
-          (p) => p.id == relatedId,
-          orElse: () => Person(
-            id: '',
-            name: '',
-            dob: '',
-            gender: '',
-            position: Offset.zero,
-          ),
-        );
+      void drawLineTo(String? id, Color color) {
+        if (id == null) return;
+        final target = people.firstWhere((p) => p.id == id, orElse: () => Person(id: '', name: '', dob: '', gender: '', position: Offset.zero));
         if (target.id.isEmpty) return;
 
         lines.add(Positioned.fill(
@@ -58,9 +61,9 @@ class _HomeViewState extends State<HomeView> {
         ));
       }
 
-      addLineTo(person.motherId, Colors.pink);
-      addLineTo(person.fatherId, Colors.blue);
-      addLineTo(person.spouseId, Colors.green);
+      drawLineTo(person.motherId, Colors.pink);
+      drawLineTo(person.fatherId, Colors.blue);
+      drawLineTo(person.spouseId, Colors.green);
     }
 
     return lines;
@@ -70,22 +73,29 @@ class _HomeViewState extends State<HomeView> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Family Tree (Graphical View)'),
+        title: Text('Family Tree'),
         actions: [
           IconButton(
             icon: Icon(Icons.add),
+            tooltip: 'Add Person',
             onPressed: _addPerson,
           ),
+          IconButton(
+            icon: Icon(Icons.download),
+            tooltip: 'Export as HTML Snapshot',
+            onPressed: _exportAsImage,
+          )
         ],
       ),
       body: InteractiveViewer(
-        maxScale: 5.0,
+        boundaryMargin: EdgeInsets.all(1000),
         minScale: 0.1,
+        maxScale: 5,
         child: Stack(
           children: [
             ..._buildRelationshipLines(),
-            ...people.map((person) => PersonNode(
-                  person: person,
+            ...people.map((p) => PersonNode(
+                  person: p,
                   onUpdate: _onUpdatePerson,
                 )),
           ],

@@ -37,7 +37,7 @@ class _PersonNodeState extends State<PersonNode> {
       person: widget.person,
       onSave: widget.onUpdate,
     );
-    setState(() {}); // Refresh display after edit
+    setState(() {});
   }
 
   @override
@@ -48,7 +48,6 @@ class _PersonNodeState extends State<PersonNode> {
       child: GestureDetector(
         onPanUpdate: _onDrag,
         onDoubleTap: _editPerson,
-        onTap: () => print('Tapped ${widget.person.name}'),
         behavior: HitTestBehavior.translucent,
         child: Column(
           mainAxisSize: MainAxisSize.min,
