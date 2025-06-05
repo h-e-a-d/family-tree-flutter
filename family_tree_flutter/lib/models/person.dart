@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:ui';
 
 class Person {
@@ -6,14 +5,13 @@ class Person {
   String name;
   String surname;
   String birthName;
-  String fatherName;
+  String fatherName; // Just a string field for convenience; not used in connector logic
   String dob;
   String gender;
   String? motherId;
   String? fatherId;
   String? spouseId;
   Offset position;
-  double radius;
 
   Person({
     required this.id,
@@ -27,49 +25,65 @@ class Person {
     this.fatherId,
     this.spouseId,
     required this.position,
-    this.radius = 30,
   });
 
   String get fullName => '$name $surname';
 
-  /// Serialize to JSON
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'surname': surname,
-        'birthName': birthName,
-        'fatherName': fatherName,
-        'dob': dob,
-        'gender': gender,
-        'motherId': motherId,
-        'fatherId': fatherId,
-        'spouseId': spouseId,
-        'x': position.dx,
-        'y': position.dy,
-        'radius': radius,
-      };
+  /// Convert Person to a JSON‐compatible map.
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'surname': surname,
+      'birthName': birthName,
+      'fatherName': fatherName,
+      'dob': dob,
+      'gender': gender,
+      'motherId': motherId,
+      'fatherId': fatherId,
+      'spouseId': spouseId,
+      'position': {
+        'dx': position.dx,
+        'dy': position.dy,
+      },
+    };
+  }
 
-  /// Deserialize from JSON
-  factory Person.fromJson(Map<String, dynamic> m) => Person(
-        id: m['id'],
-        name: m['name'],
-        surname: m['surname'],
-        birthName: m['birthName'],
-        fatherName: m['fatherName'],
-        dob: m['dob'],
-        gender: m['gender'],
-        motherId: m['motherId'],
-        fatherId: m['fatherId'],
-        spouseId: m['spouseId'],
-        position: Offset((m['x'] as num).toDouble(), (m['y'] as num).toDouble()),
-        radius: (m['radius'] as num).toDouble(),
-      );
+  /// Reconstruct a Person from a Map (the inverse of toJson).
+  static Person fromJson(Map<String, dynamic> m) {
+    final posMap = m['position'] as Map<String, dynamic>;
+    return Person(
+      id: m['id'] as String,
+      name: m['name'] as String,
+      surname: m['surname'] as String,
+      birthName: m['birthName'] as String,
+      fatherName: m['fatherName'] as String,
+      dob: m['dob'] as String,
+      gender: m['gender'] as String,
+      motherId: (m['motherId'] as String?)?.isNotEmpty == true ? (m['motherId'] as String) : null,
+      fatherId: (m['fatherId'] as String?)?.isNotEmpty == true ? (m['fatherId'] as String) : null,
+      spouseId: (m['spouseId'] as String?)?.isNotEmpty == true ? (m['spouseId'] as String) : null,
+      position: Offset(
+        (posMap['dx'] as num).toDouble(),
+        (posMap['dy'] as num).toDouble(),
+      ),
+    );
+  }
 
-  static String encodeList(List<Person> list) =>
-      jsonEncode(list.map((p) => p.toJson()).toList());
-
-  static List<Person> decodeList(String jsonString) {
-    final arr = jsonDecode(jsonString) as List<dynamic>;
-    return arr.map((m) => Person.fromJson(m as Map<String, dynamic>)).toList();
+  /// Create a deep copy (used for undo history).
+  Person copy() {
+    return Person(
+      id: id,
+      name: name,
+      surname: surname,
+      birthName: birthName,
+      fatherName: fatherName,
+      dob: dob,
+      gender: gender,
+      motherId: motherId,
+      fatherId: fatherId,
+      spouseId: spouseId,
+      position: Offset(position.dx, position.dy),
+    );
   }
 }

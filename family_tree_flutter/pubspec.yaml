@@ -1,22 +1,21 @@
 name: family_tree_flutter
-description: A Flutter app to build and manage a family tree visually.
-version: 1.0.0+1
+description: A Flutter family‐tree builder with connectors, JSON export/import, font pickers, undo, and “bring to front.”
+
+publish_to: "none"
 
 environment:
-  sdk: ">=3.3.0 <4.0.0"
+  sdk: ">=2.18.0 <4.0.0"
+  flutter: ">=3.0.0"
 
 dependencies:
   flutter:
     sdk: flutter
-  printing: ^5.12.0
-  pdf: ^3.10.4
 
-
+  # No additional plugins required for the features below.
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^3.0.0
 
 flutter:
   uses-material-design: true
