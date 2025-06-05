@@ -1,4 +1,5 @@
 // lib/widgets/person_node.dart
+import 'dart:math';
 import 'package:flutter/material.dart';
 import '../models/person.dart';
 import 'person_modal.dart';

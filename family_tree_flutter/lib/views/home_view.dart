@@ -2,6 +2,7 @@
 import 'dart:convert';
 import 'dart:html' as html; // For Web-only import/export
 import 'package:flutter/material.dart';
+import 'package:vector_math/vector_math_64.dart'; // For Vector3
 import '../models/person.dart';
 import '../widgets/person_node.dart';
 
@@ -31,11 +32,11 @@ class _HomeViewState extends State<HomeView> {
   // Temporary first‐selected in “Connect” mode
   String? _firstConnectId;
 
-  // Scroll/controller for pan/zoom
+  // Controller for pan/zoom
   final TransformationController _transformController =
       TransformationController();
 
-  // Grid paint
+  // Grid painter
   final GridPainter _gridPainter = GridPainter();
 
   @override
@@ -44,17 +45,10 @@ class _HomeViewState extends State<HomeView> {
     super.dispose();
   }
 
-  @override
-  void initState() {
-    super.initState();
-    // Start with empty tree.  You can preload a demo here if you like.
-  }
-
   // Save current state (JSON) onto historyStack
   void _pushHistory() {
     final jsonString = jsonEncode(_people.map((p) => p.toJson()).toList());
     _historyStack.add(jsonString);
-    // Limit history to last 50 actions
     if (_historyStack.length > 50) {
       _historyStack.removeAt(0);
     }
@@ -72,17 +66,24 @@ class _HomeViewState extends State<HomeView> {
     setState(() {});
   }
 
-  // Add a new person at center
+  // Add a new person at viewport center
   void _addPerson() {
     _pushHistory();
     final id = 'p${_nextId++}';
-    // Center of viewport in Canvas coordinates:
-    final viewport = _transformController.value;
-    final canvasCenter = viewport.transformOffset(
-      // screen center = half of MediaQuery, then inverse‐transform
-      Offset(MediaQuery.of(context).size.width / 2,
-          MediaQuery.of(context).size.height / 2),
+
+    // Compute canvas‐space center by inverse‐transforming the screen center
+    final screenCenter = Offset(
+      MediaQuery.of(context).size.width / 2,
+      MediaQuery.of(context).size.height / 2,
     );
+    final matrix = _transformController.value;
+    final v = matrix.transform3(Vector3(
+      screenCenter.dx,
+      screenCenter.dy,
+      0,
+    ));
+    final canvasCenter = Offset(v.x, v.y);
+
     final newPerson = Person(
       id: id,
       name: 'First',
@@ -112,28 +113,26 @@ class _HomeViewState extends State<HomeView> {
         // Pick the first one
         _firstConnectId = p.id;
       } else if (_firstConnectId != p.id) {
-        // We have two distinct circles: decide relationship flow
+        // We have two distinct circles: decide relationship
         final a = _people.firstWhere((x) => x.id == _firstConnectId);
         final b = p;
-        // If either is already parent of the other, skip
+        // If either is already parent/child or spouse, skip
         if (a.motherId == b.id ||
             a.fatherId == b.id ||
             b.motherId == a.id ||
-            b.fatherId == a.id) {
-          // Already parent/child
-        } else if (a.spouseId == b.id) {
-          // Already spouse
+            b.fatherId == a.id ||
+            a.spouseId == b.id) {
+          // Already linked
         } else {
-          // For simplicity: if genders differ, link as spouses.
+          // If genders differ → spouses
           if (a.gender != 'unknown' &&
               b.gender != 'unknown' &&
               a.gender != b.gender) {
-            // make them spouses
             a.spouseId = b.id;
             b.spouseId = a.id;
           } else {
-            // Otherwise, treat the first clicked as “parent” of the second
-            b.fatherId = a.id; // always as father, for simplicity
+            // Otherwise make 'a' the father of 'b'
+            b.fatherId = a.id;
             b.fatherName = a.fullName;
           }
         }
@@ -144,7 +143,7 @@ class _HomeViewState extends State<HomeView> {
     }
   }
 
-  // Draw all connector lines on a Canvas
+  // Draw connector lines between parents & children, and spouses.
   Widget _buildConnectorCanvas() {
     return CustomPaint(
       size: Size.infinite,
@@ -152,7 +151,7 @@ class _HomeViewState extends State<HomeView> {
     );
   }
 
-  // Update a Person (e.g. after editing or after drag)
+  // Update a Person (after edit or drag)
   void _updatePerson(Person updated) {
     final idx = _people.indexWhere((p) => p.id == updated.id);
     if (idx >= 0) {
@@ -161,7 +160,7 @@ class _HomeViewState extends State<HomeView> {
     }
   }
 
-  // Bring selected circle to front (highest stack order)
+  // Bring selected circle to front
   void _bringToFront() {
     if (_selectedPersonId == null) return;
     _pushHistory();
@@ -173,7 +172,7 @@ class _HomeViewState extends State<HomeView> {
     }
   }
 
-  // Export current list of people to JSON file (Web-only)
+  // Export current list of people to JSON (Web)
   void _exportJson() {
     final jsonString = const JsonEncoder.withIndent('  ')
         .convert(_people.map((p) => p.toJson()).toList());
@@ -189,17 +188,17 @@ class _HomeViewState extends State<HomeView> {
     html.Url.revokeObjectUrl(url);
   }
 
-  // Import JSON (Web only)
+  // Import JSON (Web)
   void _importJson() {
     final uploadInput = html.FileUploadInputElement()..accept = '.json';
     uploadInput.click();
-    uploadInput.onChange.listen((e) {
+    uploadInput.onChange.listen((_) {
       final files = uploadInput.files;
       if (files == null || files.isEmpty) return;
       final file = files.first;
       final reader = html.FileReader();
       reader.readAsText(file);
-      reader.onLoadEnd.listen((e) {
+      reader.onLoadEnd.listen((_) {
         try {
           final content = reader.result as String;
           final List<dynamic> data = jsonDecode(content);
@@ -211,7 +210,7 @@ class _HomeViewState extends State<HomeView> {
             ..clear()
             ..addAll(imported);
           setState(() {});
-        } catch (err) {
+        } catch (_) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
                 content: Text('Invalid JSON file. Cannot import.')),
@@ -285,7 +284,7 @@ class _HomeViewState extends State<HomeView> {
                   // 2) Connectors
                   _buildConnectorCanvas(),
 
-                  // 3) Person nodes (in order of _people list)
+                  // 3) Person nodes
                   for (var i = 0; i < _people.length; i++)
                     PersonNode(
                       person: _people[i],
@@ -337,10 +336,6 @@ class GridPainter extends CustomPainter {
 }
 
 /// Draws connector lines between parents & children, and spouses.
-/// For each person:
-///   - If person.motherId != null, draw a line from mother->child.
-///   - If person.fatherId != null, draw a line from father->child.
-///   - If person.spouseId != null, draw a dashed line between spouses.
 class ConnectorPainter extends CustomPainter {
   final List<Person> people;
 
@@ -359,7 +354,7 @@ class ConnectorPainter extends CustomPainter {
       ..color = Colors.redAccent;
 
     for (final child in people) {
-      // Draw parent-child lines:
+      // parent-child lines:
       if (child.motherId != null) {
         final mother = people.firstWhere(
             (p) => p.id == child.motherId,
@@ -372,7 +367,7 @@ class ConnectorPainter extends CustomPainter {
             orElse: () => child);
         _drawLineBetween(parent: father, child: child, canvas: canvas, paint: paint);
       }
-      // Draw spouse lines:
+      // spouse lines:
       if (child.spouseId != null) {
         final spouse = people.firstWhere(
             (p) => p.id == child.spouseId,
