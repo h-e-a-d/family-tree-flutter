@@ -1,14 +1,16 @@
+// lib/widgets/connector_line.dart
+
 import 'package:flutter/material.dart';
 import '../models/person.dart';
 
-///
-/// A CustomPainter that draws straight lines (“relations”) between two PersonNodes.
-/// We pass their positions, whether it’s a spouse (dashed) or parent-child (solid).
+/// Draws a straight line between two Person nodes:
+///  • Solid grey for parent‐child
+///  • Dashed red for spouse
 ///
 class ConnectorLine extends StatelessWidget {
   final Person from;
   final Person to;
-  final bool isSpouse; // if true, draw dashed red line; else solid grey
+  final bool isSpouse;
 
   const ConnectorLine({
     super.key,
@@ -25,7 +27,7 @@ class ConnectorLine extends StatelessWidget {
         end: to.position,
         isSpouse: isSpouse,
       ),
-      child: Container(),
+      size: Size.infinite,
     );
   }
 }
@@ -50,14 +52,15 @@ class _ConnectorPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round;
 
     if (isSpouse) {
-      // Dashed line
-      final dashWidth = 8.0;
-      final dashSpace = 4.0;
-      double distance = (end - start).distance;
-      final double dx = (end.dx - start.dx) / distance;
-      final double dy = (end.dy - start.dy) / distance;
+      // Draw a dashed line between start and end
+      final totalDist = (end - start).distance;
+      if (totalDist == 0) return;
+      final dx = (end.dx - start.dx) / totalDist;
+      final dy = (end.dy - start.dy) / totalDist;
       double progress = 0;
-      while (progress < distance) {
+      const dashWidth = 8.0;
+      const dashSpace = 4.0;
+      while (progress < totalDist) {
         final x1 = start.dx + dx * progress;
         final y1 = start.dy + dy * progress;
         final x2 = start.dx + dx * (progress + dashWidth);
@@ -66,7 +69,7 @@ class _ConnectorPainter extends CustomPainter {
         progress += dashWidth + dashSpace;
       }
     } else {
-      // Solid line
+      // Solid line for parent‐child
       canvas.drawLine(start, end, paint);
     }
   }

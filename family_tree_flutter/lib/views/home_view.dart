@@ -1,22 +1,24 @@
-import 'dart:convert';
-import 'dart:html' as html; // for web file upload/download
-import 'dart:typed_data';
-import 'dart:ui' as ui;
+// lib/views/home_view.dart
 
+import 'dart:convert';
+import 'dart:html' as html;          // For web‐only file import/export
+import 'dart:typed_data';
+import 'dart:ui' as ui;             // For RepaintBoundary → toImage()
+
+import 'package:flutter/foundation.dart'; // for kIsWeb
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:path_provider/path_provider.dart'; // for mobile JSON import/export
 import 'package:uuid/uuid.dart';
+
 import '../models/person.dart';
 import '../widgets/person_node.dart';
 import '../widgets/connector_line.dart';
 
 ///
-/// The main “canvas” view, containing:
-///  - A RepaintBoundary‐wrapped Stack for all PersonNodes & ConnectorLines
-///  - Top‐right “+” button to add a new Person at canvas center
-///  - Undo, To Front, Color/Font controls shown when a circle is selected
-///  - JSON Export/Import buttons
+/// The main canvas “Home” screen.  Contains:
+///  • An InteractiveViewer + RepaintBoundary stack
+///  • A “+” button to add at viewport center
+///  • Top bar with Undo / To Front / Connect / ExportJSON / ImportJSON / ExportPNG
+///  • Per‐circle font/color controls when selected
 ///
 class HomeView extends StatefulWidget {
   @override
@@ -27,43 +29,37 @@ class _HomeViewState extends State<HomeView> {
   final GlobalKey _canvasKey = GlobalKey();
   final uuid = Uuid();
 
-  // All persons
+  // All Person objects
   List<Person> _people = [];
 
-  // History stack for “undo”
+  // Undo stack: each entry is a deep copy of the _people list
   final List<List<Person>> _history = [];
 
-  // Currently selected Person id
+  // Currently selected Person.id (or null)
   String? _selectedId;
 
-  // Are we in “connect mode”?
+  // Connect‐mode state
   bool _connectMode = false;
   String? _firstConnectId;
 
   // Pan & zoom
-  final TransformationController _transformationController =
-      TransformationController();
-  late final ui.ViewportBoundary _vpBoundary;
+  final TransformationController _transformationController = TransformationController();
 
   @override
   void initState() {
     super.initState();
-    // No need to set vpBoundary manually; we’ll use InteractiveViewer.
   }
 
-  // Push a deep‐copied snapshot into history
+  // Push a snapshot into undo history (deep copy)
   void _pushHistory() {
-    final snapshot = _people
-        .map((p) => Person.fromJson(p.toJson()))
-        .toList();
+    final snapshot = _people.map((p) => Person.fromJson(p.toJson())).toList();
     _history.add(snapshot);
     if (_history.length > 50) {
-      // cap undo‐stack at 50
       _history.removeAt(0);
     }
   }
 
-  // Undo to previous state
+  // Undo
   void _undo() {
     if (_history.isEmpty) return;
     setState(() {
@@ -74,50 +70,50 @@ class _HomeViewState extends State<HomeView> {
     });
   }
 
-  // Bring selected Person to front (end of list → drawn last)
+  // Bring selected to front (i.e. move to end of _people so it draws last)
   void _bringToFront() {
     if (_selectedId == null) return;
     final idx = _people.indexWhere((p) => p.id == _selectedId);
     if (idx == -1) return;
-    final person = _people.removeAt(idx);
-    _people.add(person);
+    final p = _people.removeAt(idx);
+    _people.add(p);
     setState(() {});
   }
 
-  // Add a new person at canvas center
+  // Add a new person at the center of the visible viewport
   void _addPerson() {
     _pushHistory();
-    // Compute canvas center in global coordinates
-    final matrix = _transformationController.value;
-    final renderBox =
-        _canvasKey.currentContext!.findRenderObject() as RenderBox;
+    final renderBox = _canvasKey.currentContext!.findRenderObject() as RenderBox;
     final size = renderBox.size;
     final centerLocal = Offset(size.width / 2, size.height / 2);
-    // Invert the matrix to map viewport→canvas coordinates
-    final inv = Matrix4.inverted(matrix);
-    final c = inv.transform3(Vector3(centerLocal.dx, centerLocal.dy, 0));
-    final pos = Offset(c.x, c.y);
+    // Invert the current matrix: visible viewport → canvas coordinates
+    final inv = Matrix4.inverted(_transformationController.value);
+    final vec3 = inv.transform3(Vector3(centerLocal.dx, centerLocal.dy, 0));
+    final newPos = Offset(vec3.x, vec3.y);
+
     final newPerson = Person(
-      id: uuid.v4(),
+      id: '',
       name: '',
       surname: '',
       birthName: '',
       fatherName: '',
       dob: '',
       gender: '',
-      position: pos,
+      position: newPos,
     );
+
     _people.add(newPerson);
     setState(() {
-      _selectedId = newPerson.id;
+      _selectedId = '';
     });
-    // Immediately open edit modal on the new person
+
+    // Immediately open modal for the new person
     WidgetsBinding.instance!.addPostFrameCallback((_) {
-      _openModalFor(newPerson.id);
+      _openModalFor('');
     });
   }
 
-  // Select or unselect
+  // Select or Deselect a person
   void _selectPerson(String? id) {
     setState(() {
       if (_selectedId == id) {
@@ -125,7 +121,7 @@ class _HomeViewState extends State<HomeView> {
       } else {
         _selectedId = id;
       }
-      // Exiting connect mode if someone reselects
+      // Cancels connect‐mode if active
       if (_selectedId != null && _connectMode) {
         _connectMode = false;
         _firstConnectId = null;
@@ -133,12 +129,11 @@ class _HomeViewState extends State<HomeView> {
     });
   }
 
-  // Connect mode tapped
+  // Toggle connect mode
   void _startConnect() {
     if (_selectedId == null) return;
     setState(() {
       if (_connectMode) {
-        // if already in connect mode, cancel it
         _connectMode = false;
         _firstConnectId = null;
       } else {
@@ -148,11 +143,10 @@ class _HomeViewState extends State<HomeView> {
     });
   }
 
-  // Complete a connection between two circles
+  // Attempt to form a relation between two tapped circles
   void _completeConnect(String otherId) {
     if (!_connectMode || _firstConnectId == null) return;
     if (_firstConnectId == otherId) {
-      // cannot connect to itself
       setState(() {
         _connectMode = false;
         _firstConnectId = null;
@@ -163,15 +157,12 @@ class _HomeViewState extends State<HomeView> {
     final p1 = _people.firstWhere((p) => p.id == _firstConnectId);
     final p2 = _people.firstWhere((p) => p.id == otherId);
 
-    // Decide relation: if genders opposite → parent-child
-    // For simplicity: if p1.gender == 'male', then p1 is father of p2. etc.
-    // Here we’ll simply set p2.fatherId = p1.id if p1.gender=='male'
+    // If p1.gender is “male” or “female” → parent-child; otherwise spouse
     if (p1.gender == 'male') {
       p2.fatherId = p1.id;
     } else if (p1.gender == 'female') {
       p2.motherId = p1.id;
     } else {
-      // default: spouse relationship
       p1.spouseId = p2.id;
       p2.spouseId = p1.id;
     }
@@ -182,7 +173,7 @@ class _HomeViewState extends State<HomeView> {
     });
   }
 
-  // Modify a person in place
+  // Update a person in place
   void _updatePerson(Person edited) {
     final idx = _people.indexWhere((p) => p.id == edited.id);
     if (idx == -1) return;
@@ -191,7 +182,7 @@ class _HomeViewState extends State<HomeView> {
     setState(() {});
   }
 
-  // Remove a person and any references to it
+  // Delete a person and clear any references
   void _deletePerson(String id) {
     _pushHistory();
     _people.removeWhere((p) => p.id == id);
@@ -205,12 +196,10 @@ class _HomeViewState extends State<HomeView> {
     });
   }
 
-  // Export all persons (and relations) as JSON, then trigger download
+  // Export JSON (web only)
   void _exportToJson() {
     final listMap = _people.map((p) => p.toJson()).toList();
     final jsonStr = jsonEncode(listMap);
-
-    // On web: use a Blob, then an anchor for download
     final bytes = utf8.encode(jsonStr);
     final blob = html.Blob([bytes], 'application/json');
     final url = html.Url.createObjectUrlFromBlob(blob);
@@ -223,93 +212,50 @@ class _HomeViewState extends State<HomeView> {
     html.Url.revokeObjectUrl(url);
   }
 
-  // Import JSON: open file picker (web) or native (mobile)
+  // Import JSON (web only)
   Future<void> _importFromJson() async {
-    if (kIsWeb) {
-      // Web: use an <input type="file"> from dart:html
-      final input = html.FileUploadInputElement()
-        ..accept = '.json'
-        ..multiple = false;
-      input.click();
-      input.onChange.listen((_) {
-        final file = input.files!.first;
-        final reader = html.FileReader();
-        reader.onLoad.first.then((_) {
-          final content = reader.result as String;
-          final List<dynamic> listMap = jsonDecode(content);
-          final imported = listMap
-              .map((e) => Person.fromJson(e as Map<String, dynamic>))
-              .toList();
-
-          _pushHistory();
-          setState(() {
-            _people = imported;
-            _selectedId = null;
-          });
-        });
-        reader.readAsText(file);
-      });
-    } else {
-      // Mobile (Android/iOS): pick from local file system
-      try {
-        final directory = await getApplicationDocumentsDirectory();
-        final path = directory.path;
-        // In a real app you’d present a file‐picker UI. For brevity:
-        // We assume a file named “family_tree_import.json” in documents/
-        final file = File('$path/family_tree_import.json');
-        if (!await file.exists()) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('No “family_tree_import.json” found in Documents')),
-          );
-          return;
-        }
-        final content = await file.readAsString();
+    final input = html.FileUploadInputElement()
+      ..accept = '.json'
+      ..multiple = false;
+    input.click();
+    input.onChange.listen((_) {
+      final file = input.files!.first;
+      final reader = html.FileReader();
+      reader.onLoad.first.then((_) {
+        final content = reader.result as String;
         final List<dynamic> listMap = jsonDecode(content);
         final imported = listMap
             .map((e) => Person.fromJson(e as Map<String, dynamic>))
             .toList();
-
         _pushHistory();
         setState(() {
           _people = imported;
           _selectedId = null;
         });
-      } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to import: $e')),
-        );
-      }
-    }
+      });
+      reader.readAsText(file);
+    });
   }
 
-  // Capture canvas and trigger PNG download (web) or save to file (mobile)
+  // Export to PNG (web only)
   Future<void> _exportToPng() async {
     try {
       final boundary = _canvasKey.currentContext!
           .findRenderObject() as RenderRepaintBoundary;
       final image = await boundary.toImage(pixelRatio: 3.0);
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      final byteData =
+          await image.toByteData(format: ui.ImageByteFormat.png);
       final pngBytes = byteData!.buffer.asUint8List();
 
-      if (kIsWeb) {
-        final blob = html.Blob([pngBytes], 'image/png');
-        final url = html.Url.createObjectUrlFromBlob(blob);
-        final anchor = html.document.createElement('a') as html.AnchorElement
-          ..href = url
-          ..download = 'family_tree.png';
-        html.document.body!.append(anchor);
-        anchor.click();
-        anchor.remove();
-        html.Url.revokeObjectUrl(url);
-      } else {
-        final dir = await getApplicationDocumentsDirectory();
-        final filePath = '${dir.path}/family_tree.png';
-        final file = File(filePath);
-        await file.writeAsBytes(pngBytes);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('PNG saved to $filePath')),
-        );
-      }
+      final blob = html.Blob([pngBytes], 'image/png');
+      final url = html.Url.createObjectUrlFromBlob(blob);
+      final anchor = html.document.createElement('a') as html.AnchorElement
+        ..href = url
+        ..download = 'family_tree.png';
+      html.document.body!.append(anchor);
+      anchor.click();
+      anchor.remove();
+      html.Url.revokeObjectUrl(url);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to export PNG: $e')),
@@ -317,7 +263,7 @@ class _HomeViewState extends State<HomeView> {
     }
   }
 
-  // On double‐tap of blank area, deselect everything and cancel connect
+  // Deselect and cancel connect on double‐tap of blank area
   void _onBackgroundDoubleTap() {
     setState(() {
       _selectedId = null;
@@ -326,15 +272,34 @@ class _HomeViewState extends State<HomeView> {
     });
   }
 
-  // Open edit modal for a given Person ID
+  // Open “Edit Person” modal for a given ID (or blank ID for a newly added Person)
   Future<void> _openModalFor(String id) async {
-    final person = _people.firstWhere((p) => p.id == id);
+    Person target;
+    if (id.isEmpty) {
+      // Just‐created person has id==""; the Person object in the list also has id==""
+      target = _people.firstWhere((p) => p.id == "");
+    } else {
+      target = _people.firstWhere((p) => p.id == id);
+    }
     await showPersonModal(
       context: context,
-      person: person,
+      person: target,
       allPeople: _people,
-      onSave: (edited) => _updatePerson(edited),
+      onSave: (edited) {
+        // If that Person had no ID, assign the new UUID and replace in list
+        if (edited.id.isEmpty) {
+          edited.id = uuid.v4();
+        }
+        _updatePerson(edited);
+      },
     );
+    // After saving, if it was a “new” person, it now has a real id, so if was showing "" as selected, fix:
+    if (_selectedId == "") {
+      final newId = _people.firstWhere((p) => p.id != "").id;
+      setState(() {
+        _selectedId = newId;
+      });
+    }
   }
 
   @override
@@ -343,12 +308,11 @@ class _HomeViewState extends State<HomeView> {
       body: SafeArea(
         child: Stack(
           children: [
-            // Main canvas area with pan & zoom → 
+            // ── Main canvas: InteractiveViewer + RepaintBoundary ──
             Positioned.fill(
               child: GestureDetector(
                 onDoubleTap: _onBackgroundDoubleTap,
                 child: InteractiveViewer(
-                  clipBehavior: Clip.none,
                   panEnabled: true,
                   scaleEnabled: true,
                   transformationController: _transformationController,
@@ -362,10 +326,10 @@ class _HomeViewState extends State<HomeView> {
                           painter: _GridPainter(),
                         ),
 
-                        // Connector lines (parent/child & spouses)
+                        // Connector lines
                         ..._generateConnectorLines(),
 
-                        // PersonNodes (in order)
+                        // Person nodes
                         ..._people.map((p) {
                           return PersonNode(
                             key: ValueKey(p.id),
@@ -390,7 +354,7 @@ class _HomeViewState extends State<HomeView> {
               ),
             ),
 
-            // “+” button (bottom-right)
+            // “+” button in lower right
             Positioned(
               bottom: 24,
               right: 24,
@@ -400,54 +364,57 @@ class _HomeViewState extends State<HomeView> {
               ),
             ),
 
-            // Top‐left: Undo / To Front / Connect / Export / Import
+            // Top‐left bar: Undo / To Front / Connect / Export/Import JSON / Export PNG
             Positioned(
               top: 16,
               left: 16,
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: Icon(Icons.undo),
-                    tooltip: 'Undo',
-                    onPressed: _history.isEmpty ? null : _undo,
-                  ),
-                  IconButton(
-                    icon: Icon(Icons.vertical_align_top),
-                    tooltip: 'Bring Selected to Front',
-                    onPressed:
-                        (_selectedId == null) ? null : _bringToFront,
-                  ),
-                  IconButton(
-                    icon: Icon(Icons.compare_arrows),
-                    tooltip: _connectMode ? 'Cancel Connect' : 'Connect',
-                    color: _connectMode ? Colors.orange : null,
-                    onPressed:
-                        (_selectedId == null) ? null : _startConnect,
-                  ),
-                  SizedBox(width: 8),
-                  ElevatedButton.icon(
-                    icon: Icon(Icons.download_outlined),
-                    label: Text('Export JSON'),
-                    onPressed: _people.isEmpty ? null : _exportToJson,
-                  ),
-                  SizedBox(width: 8),
-                  ElevatedButton.icon(
-                    icon: Icon(Icons.upload_outlined),
-                    label: Text('Import JSON'),
-                    onPressed: _importFromJson,
-                  ),
-                  SizedBox(width: 8),
-                  ElevatedButton.icon(
-                    icon: Icon(Icons.image_outlined),
-                    label: Text('Export PNG'),
-                    onPressed: _people.isEmpty ? null : _exportToPng,
-                  ),
-                ],
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: Icon(Icons.undo),
+                      tooltip: 'Undo',
+                      onPressed: _history.isEmpty ? null : _undo,
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.vertical_align_top),
+                      tooltip: 'Bring Selected to Front',
+                      onPressed: (_selectedId == null) ? null : _bringToFront,
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.compare_arrows),
+                      tooltip: _connectMode ? 'Cancel Connect' : 'Connect',
+                      color: _connectMode ? Colors.orange : null,
+                      onPressed: (_selectedId == null) ? null : _startConnect,
+                    ),
+                    SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      icon: Icon(Icons.download_outlined),
+                      label: Text('Export JSON'),
+                      onPressed:
+                          _people.isEmpty ? null : () => _exportToJson(),
+                    ),
+                    SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      icon: Icon(Icons.upload_outlined),
+                      label: Text('Import JSON'),
+                      onPressed: _importFromJson,
+                    ),
+                    SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      icon: Icon(Icons.image_outlined),
+                      label: Text('Export PNG'),
+                      onPressed:
+                          _people.isEmpty ? null : () => _exportToPng(),
+                    ),
+                  ],
+                ),
               ),
             ),
 
-            // When a Person is selected, show font/color controls at top‐right
-            if (_selectedId != null) ...[
+            // Top‐right: font/color controls when a circle is selected
+            if (_selectedId != null)
               Positioned(
                 top: 16,
                 right: 16,
@@ -456,33 +423,28 @@ class _HomeViewState extends State<HomeView> {
                   onUpdate: (edited) => _updatePerson(edited),
                 ),
               ),
-            ],
           ],
         ),
       ),
     );
   }
 
-  // Generate connector lines based on parent‐child and spouse relations
+  // Builds a list of ConnectorLine widgets for every relation
   List<Widget> _generateConnectorLines() {
     final lines = <Widget>[];
     for (var p in _people) {
-      // Mother line
       if (p.motherId != null) {
         final mom = _people.firstWhere((x) => x.id == p.motherId);
-        lines.add(ConnectorLine(start: mom.position, end: p.position, isSpouse: false));
+        lines.add(ConnectorLine(from: mom, to: p, isSpouse: false));
       }
-      // Father line
       if (p.fatherId != null) {
         final dad = _people.firstWhere((x) => x.id == p.fatherId);
-        lines.add(ConnectorLine(start: dad.position, end: p.position, isSpouse: false));
+        lines.add(ConnectorLine(from: dad, to: p, isSpouse: false));
       }
-      // Spouse line
       if (p.spouseId != null) {
         final s = _people.firstWhere((x) => x.id == p.spouseId);
-        // Only draw if our ID < spouseId to avoid drawing twice
         if (p.id.compareTo(s.id) < 0) {
-          lines.add(ConnectorLine(start: p.position, end: s.position, isSpouse: true));
+          lines.add(ConnectorLine(from: p, to: s, isSpouse: true));
         }
       }
     }
@@ -491,7 +453,7 @@ class _HomeViewState extends State<HomeView> {
 }
 
 ///
-/// Draws a light grid background (2000×2000).  Adjust as needed.
+/// Simple grid background painter (2000×2000, 50px step).
 ///
 class _GridPainter extends CustomPainter {
   @override
@@ -500,7 +462,7 @@ class _GridPainter extends CustomPainter {
       ..color = Colors.grey.shade300
       ..strokeWidth = 1;
 
-    final step = 50.0;
+    const step = 50.0;
     for (double x = 0; x <= size.width; x += step) {
       canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
     }
@@ -515,13 +477,13 @@ class _GridPainter extends CustomPainter {
 
 ///
 /// When a circle is selected, show these controls:
-///  - Circle color picker (HSV Popup)
-///  - Font color picker (HSV Popup)
-///  - Font size slider
+///  • Circle‐color (HSV) picker
+///  • Font‐color (HSV) picker
+///  • Font‐size slider
 ///
-class _SelectedControls extends StatelessWidget {
+class _SelectedControls extends StatefulWidget {
   final Person person;
-  final Function(Person) onUpdate;
+  final void Function(Person) onUpdate;
 
   const _SelectedControls({
     required this.person,
@@ -529,11 +491,24 @@ class _SelectedControls extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    double fontSize = person.fontSize;
-    Color fontColor = person.fontColor;
-    Color circleColor = person.circleColor;
+  State<_SelectedControls> createState() => _SelectedControlsState();
+}
 
+class _SelectedControlsState extends State<_SelectedControls> {
+  late double fontSize;
+  late Color fontColor;
+  late Color circleColor;
+
+  @override
+  void initState() {
+    super.initState();
+    fontSize = widget.person.fontSize;
+    fontColor = widget.person.fontColor;
+    circleColor = widget.person.circleColor;
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
       padding: EdgeInsets.all(8),
       decoration: BoxDecoration(
@@ -542,8 +517,9 @@ class _SelectedControls extends StatelessWidget {
         boxShadow: [BoxShadow(blurRadius: 4, color: Colors.black12)],
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          // Circle Color Picker
+          // Circle color
           Row(
             children: [
               Text('Circle:'),
@@ -558,24 +534,23 @@ class _SelectedControls extends StatelessWidget {
                         content: ColorPicker(
                           color: circleColor,
                           onChanged: (c) => circleColor = c,
-                          pickersEnabled: const {
-                            ColorPickerType.hsv: true,
-                            ColorPickerType.wheel: true,
-                            ColorPickerType.hexInput: true,
-                          },
                         ),
                         actions: [
                           TextButton(
-                              onPressed: () => Navigator.of(ctx2).pop(circleColor),
+                              onPressed: () =>
+                                  Navigator.of(ctx2).pop(circleColor),
                               child: Text('Done')),
                         ],
                       );
                     },
                   );
                   if (picked != null) {
-                    final updated = Person.fromJson(person.toJson())
-                      ..circleColor = picked;
-                    onUpdate(updated);
+                    setState(() {
+                      circleColor = picked;
+                    });
+                    final updated = Person.fromJson(widget.person.toJson())
+                      ..circleColor = circleColor;
+                    widget.onUpdate(updated);
                   }
                 },
                 child: Container(
@@ -593,7 +568,7 @@ class _SelectedControls extends StatelessWidget {
 
           SizedBox(height: 8),
 
-          // Font Color Picker
+          // Font color
           Row(
             children: [
               Text('Font:'),
@@ -608,24 +583,23 @@ class _SelectedControls extends StatelessWidget {
                         content: ColorPicker(
                           color: fontColor,
                           onChanged: (c) => fontColor = c,
-                          pickersEnabled: const {
-                            ColorPickerType.hsv: true,
-                            ColorPickerType.wheel: true,
-                            ColorPickerType.hexInput: true,
-                          },
                         ),
                         actions: [
                           TextButton(
-                              onPressed: () => Navigator.of(ctx2).pop(fontColor),
+                              onPressed: () =>
+                                  Navigator.of(ctx2).pop(fontColor),
                               child: Text('Done')),
                         ],
                       );
                     },
                   );
                   if (picked != null) {
-                    final updated = Person.fromJson(person.toJson())
-                      ..fontColor = picked;
-                    onUpdate(updated);
+                    setState(() {
+                      fontColor = picked;
+                    });
+                    final updated = Person.fromJson(widget.person.toJson())
+                      ..fontColor = fontColor;
+                    widget.onUpdate(updated);
                   }
                 },
                 child: Container(
@@ -655,10 +629,12 @@ class _SelectedControls extends StatelessWidget {
                   divisions: 12,
                   label: fontSize.round().toString(),
                   onChanged: (v) {
-                    fontSize = v;
-                    final updated = Person.fromJson(person.toJson())
+                    setState(() {
+                      fontSize = v;
+                    });
+                    final updated = Person.fromJson(widget.person.toJson())
                       ..fontSize = fontSize;
-                    onUpdate(updated);
+                    widget.onUpdate(updated);
                   },
                 ),
               ),

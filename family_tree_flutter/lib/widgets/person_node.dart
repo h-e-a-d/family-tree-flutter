@@ -1,20 +1,19 @@
-import 'dart:ui';
+// lib/widgets/person_node.dart
+
 import 'package:flutter/material.dart';
-import 'package:vector_math/vector_math_64.dart' show Matrix4;
 import '../models/person.dart';
 import 'person_modal.dart';
 
-///
-/// Each Person is rendered as a draggable circle with text on top.
-/// - Double‐tap opens the PersonModal
-/// - Single‐tap selects/unselects
-/// - Drag moves it around
+/// A single draggable/selectable circle + text for one Person.
+///  • Tap to select/deselect
+///  • Double‐tap to edit (opens the PersonModal)
+///  • Drag to move, updating the Person’s position
 ///
 class PersonNode extends StatefulWidget {
   final Person person;
   final List<Person> allPeople;
-  final Function(Person) onUpdate;
-  final Function(String?) onSelect; // callback to notify parent which person is selected (or null)
+  final void Function(Person) onUpdate;
+  final void Function(String?) onSelect;
 
   const PersonNode({
     super.key,
@@ -59,7 +58,7 @@ class _PersonNodeState extends State<PersonNode> {
               widget.onUpdate(edited);
             },
           );
-          if (mounted) setState(() {});
+          if (mounted) setState(() {}); 
         },
         onPanUpdate: (details) {
           setState(() {
@@ -85,7 +84,7 @@ class _PersonNodeState extends State<PersonNode> {
               ),
             ),
 
-            // Name text
+            // Name (centered)
             Text(
               widget.person.fullName,
               textAlign: TextAlign.center,
@@ -96,7 +95,7 @@ class _PersonNodeState extends State<PersonNode> {
               ),
             ),
 
-            // DOB below name (slightly offset)
+            // DOB below the name (small offset)
             Positioned(
               top: widget.person.fontSize + 8,
               child: Text(

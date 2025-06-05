@@ -1,4 +1,6 @@
-import 'dart:ui';
+// lib/models/person.dart
+
+import 'package:flutter/material.dart';
 
 class Person {
   String id;
@@ -37,7 +39,7 @@ class Person {
 
   String get fullName => '$name $surname';
 
-  /// Convert to JSON for export.
+  /// Convert to JSON
   Map<String, dynamic> toJson() => {
         'id': id,
         'name': name,
@@ -56,20 +58,20 @@ class Person {
         'fontSize': fontSize,
       };
 
-  /// Create from JSON (import).
+  /// Create from JSON
   factory Person.fromJson(Map<String, dynamic> m) {
     final posMap = m['position'] as Map<String, dynamic>;
     return Person(
-      id: m['id'],
-      name: m['name'],
-      surname: m['surname'],
-      birthName: m['birthName'],
-      fatherName: m['fatherName'],
-      dob: m['dob'],
-      gender: m['gender'],
-      motherId: m['motherId'],
-      fatherId: m['fatherId'],
-      spouseId: m['spouseId'],
+      id: m['id'] as String,
+      name: m['name'] as String,
+      surname: m['surname'] as String,
+      birthName: m['birthName'] as String,
+      fatherName: m['fatherName'] as String,
+      dob: m['dob'] as String,
+      gender: m['gender'] as String,
+      motherId: m['motherId'] as String?,
+      fatherId: m['fatherId'] as String?,
+      spouseId: m['spouseId'] as String?,
       position: Offset(
         (posMap['dx'] as num).toDouble(),
         (posMap['dy'] as num).toDouble(),

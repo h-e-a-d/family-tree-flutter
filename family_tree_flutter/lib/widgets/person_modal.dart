@@ -1,19 +1,19 @@
+// lib/widgets/person_modal.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter_hsvcolor_picker/flutter_hsvcolor_picker.dart';
 import 'package:uuid/uuid.dart';
 import '../models/person.dart';
 
 ///
-/// A full “Add/Edit Person” modal.  This takes in a Person object (either an empty
-/// “new” Person, or an existing Person to edit), plus the full list of allPeople
-/// so that parent/spouse dropdowns can be populated.  When “Save” is tapped, it
-/// calls `onSave(...)` with the updated Person.
+/// “Add / Edit Person” modal.  Pop this up to let the user fill in name, DOB, gender, parents, spouse, font & circle styling.
+/// When “Save” is pressed, it calls `onSave(editedPerson)`.
 ///
 Future<void> showPersonModal({
   required BuildContext context,
   required Person person,
   required List<Person> allPeople,
-  required Function(Person) onSave,
+  required void Function(Person) onSave,
 }) async {
   final nameController = TextEditingController(text: person.name);
   final surnameController = TextEditingController(text: person.surname);
@@ -29,7 +29,6 @@ Future<void> showPersonModal({
   Color fontColor = person.fontColor;
   Color circleColor = person.circleColor;
   double circleSize = person.circleSize;
-
   final uuid = Uuid();
 
   await showDialog(
@@ -39,6 +38,7 @@ Future<void> showPersonModal({
         title: Text(person.id.isEmpty ? 'Add Person' : 'Edit Person'),
         content: SingleChildScrollView(
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
               // Given Name
               TextField(
@@ -58,7 +58,7 @@ Future<void> showPersonModal({
                 decoration: InputDecoration(labelText: 'Birth Name'),
               ),
 
-              // Father’s Name (string field—it’s just text, not the relation dropdown)
+              // Father’s Name (just text input)
               TextField(
                 controller: fatherNameController,
                 decoration: InputDecoration(labelText: "Father's Name (text)"),
@@ -78,14 +78,16 @@ Future<void> showPersonModal({
                   gender = v ?? '';
                 },
                 items: <String>['', 'male', 'female']
-                    .map((g) =>
-                        DropdownMenuItem(value: g, child: Text(g.isEmpty ? 'None' : g)))
+                    .map((g) => DropdownMenuItem(
+                          value: g,
+                          child: Text(g.isEmpty ? 'None' : g),
+                        ))
                     .toList(),
               ),
 
               SizedBox(height: 12),
 
-              // Parent / Spouse dropdowns
+              // Relation dropdowns:
               _RelationDropdown(
                 label: 'Mother',
                 allPeople: allPeople,
@@ -93,7 +95,6 @@ Future<void> showPersonModal({
                 onChanged: (v) => selectedMotherId = v,
                 filterGender: 'female',
               ),
-
               _RelationDropdown(
                 label: 'Father',
                 allPeople: allPeople,
@@ -101,7 +102,6 @@ Future<void> showPersonModal({
                 onChanged: (v) => selectedFatherId = v,
                 filterGender: 'male',
               ),
-
               _RelationDropdown(
                 label: 'Spouse',
                 allPeople: allPeople,
@@ -148,7 +148,7 @@ Future<void> showPersonModal({
 
               SizedBox(height: 12),
 
-              // Color pickers for circle and font
+              // Circle Color picker
               Row(
                 children: [
                   Text('Circle Color'),
@@ -163,16 +163,12 @@ Future<void> showPersonModal({
                             content: ColorPicker(
                               color: circleColor,
                               onChanged: (c) => circleColor = c,
-                              pickersEnabled: const {
-                                ColorPickerType.hsv: true,
-                                ColorPickerType.wheel: true,
-                                ColorPickerType.hexInput: true,
-                              },
                             ),
                             actions: [
                               TextButton(
-                                  onPressed: () => Navigator.of(ctx2).pop(circleColor),
-                                  child: Text('Done')),
+                                onPressed: () => Navigator.of(ctx2).pop(circleColor),
+                                child: Text('Done'),
+                              ),
                             ],
                           );
                         },
@@ -194,6 +190,7 @@ Future<void> showPersonModal({
 
               SizedBox(height: 8),
 
+              // Font Color picker
               Row(
                 children: [
                   Text('Font Color'),
@@ -208,16 +205,12 @@ Future<void> showPersonModal({
                             content: ColorPicker(
                               color: fontColor,
                               onChanged: (c) => fontColor = c,
-                              pickersEnabled: const {
-                                ColorPickerType.hsv: true,
-                                ColorPickerType.wheel: true,
-                                ColorPickerType.hexInput: true,
-                              },
                             ),
                             actions: [
                               TextButton(
-                                  onPressed: () => Navigator.of(ctx2).pop(fontColor),
-                                  child: Text('Done')),
+                                onPressed: () => Navigator.of(ctx2).pop(fontColor),
+                                child: Text('Done'),
+                              ),
                             ],
                           );
                         },
@@ -246,9 +239,8 @@ Future<void> showPersonModal({
           ),
           ElevatedButton(
             onPressed: () {
-              // If person.id is empty, assign a new UUID
+              // Generate new ID if needed
               final newId = person.id.isEmpty ? uuid.v4() : person.id;
-
               final edited = Person(
                 id: newId,
                 name: nameController.text.trim(),
@@ -260,13 +252,12 @@ Future<void> showPersonModal({
                 motherId: selectedMotherId,
                 fatherId: selectedFatherId,
                 spouseId: selectedSpouseId,
-                position: person.position, // keep same position (for “Add”, initial caller will set center),
+                position: person.position,
                 circleSize: circleSize,
                 circleColor: circleColor,
                 fontColor: fontColor,
                 fontSize: fontSize,
               );
-
               onSave(edited);
               Navigator.of(ctx).pop();
             },
@@ -279,15 +270,15 @@ Future<void> showPersonModal({
 }
 
 ///
-/// A helper widget that shows a dropdown of allPeople (filtered by gender, if required),
-/// plus a “None” option.  It writes back to `currentId`.
+/// A helper widget that shows a dropdown of `allPeople` filtered by gender,
+/// plus a “None” option. Writes back to `currentId`.
 ///
 class _RelationDropdown extends StatelessWidget {
   final String label;
   final List<Person> allPeople;
   final String? currentId;
   final void Function(String?) onChanged;
-  final String filterGender; // "male", "female", or "all"
+  final String filterGender;
 
   const _RelationDropdown({
     required this.label,
@@ -300,7 +291,7 @@ class _RelationDropdown extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final items = <DropdownMenuItem<String>>[
-      DropdownMenuItem(value: '', child: Text('None')),
+      const DropdownMenuItem(value: '', child: Text('None')),
       ...allPeople.where((p) {
         if (p.id == currentId) return false;
         if (filterGender == 'male' && p.gender != 'male') return false;
@@ -311,7 +302,7 @@ class _RelationDropdown extends StatelessWidget {
           value: p.id,
           child: Text(p.fullName),
         );
-      }).toList(),
+      }),
     ];
 
     return DropdownButtonFormField<String>(
