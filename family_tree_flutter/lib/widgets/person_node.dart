@@ -1,3 +1,4 @@
+// lib/widgets/person_node.dart
 import 'package:flutter/material.dart';
 import '../models/person.dart';
 import 'person_modal.dart';
@@ -5,25 +6,17 @@ import 'person_modal.dart';
 class PersonNode extends StatefulWidget {
   final Person person;
   final List<Person> allPeople;
-  final Function(Person) onUpdate;
   final bool isSelected;
-
-  /// Global font settings:
-  final String fontFamily;
-  final double fontSize;
-  final Color nameColor;
-  final Color dateColor;
+  final Function(Person) onUpdate;
+  final Function(Person) onSelect;
 
   const PersonNode({
     Key? key,
     required this.person,
     required this.allPeople,
     required this.onUpdate,
-    required this.isSelected,
-    required this.fontFamily,
-    required this.fontSize,
-    required this.nameColor,
-    required this.dateColor,
+    required this.onSelect,
+    this.isSelected = false,
   }) : super(key: key);
 
   @override
@@ -40,26 +33,35 @@ class _PersonNodeState extends State<PersonNode> {
   }
 
   @override
+  void didUpdateWidget(covariant PersonNode oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // If external code updated position, reflect it:
+    position = widget.person.position;
+  }
+
+  @override
   Widget build(BuildContext context) {
+    // Circle radius
+    const double radius = 30;
+
     return Positioned(
-      left: position.dx - 30, // adjust so that the center is in correct spot
-      top: position.dy - 30,
+      left: position.dx - radius,
+      top: position.dy - radius,
       child: GestureDetector(
         onTap: () {
-          // Notify parent that this person is now selected
-          widget.onUpdate(widget.person);
+          widget.onSelect(widget.person);
         },
         onDoubleTap: () async {
-          // Open modal to edit
+          // Open modal to edit this person
           await showPersonModal(
             context: context,
             person: widget.person,
             allPeople: widget.allPeople,
-            onSave: (p) {
-              widget.onUpdate(p);
+            onSave: (updated) {
+              widget.onUpdate(updated);
             },
           );
-          setState(() {}); // redraw
+          setState(() {}); // redraw text if name/dob changed
         },
         onPanUpdate: (details) {
           setState(() {
@@ -71,20 +73,19 @@ class _PersonNodeState extends State<PersonNode> {
         child: Stack(
           alignment: Alignment.center,
           children: [
-            // The circle
+            // Circle
             Container(
-              width: 60,
-              height: 60,
+              width: radius * 2,
+              height: radius * 2,
               decoration: BoxDecoration(
+                color: widget.person.circleColor,
                 shape: BoxShape.circle,
-                color: Colors.blue.shade200,
-                border: Border.all(
-                  color: widget.isSelected ? Colors.red : Colors.black54,
-                  width: widget.isSelected ? 3 : 1,
-                ),
+                border: widget.isSelected
+                    ? Border.all(color: Colors.red.shade700, width: 3)
+                    : null,
               ),
             ),
-            // The text inside the circle
+            // Name and DOB
             Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -92,19 +93,19 @@ class _PersonNodeState extends State<PersonNode> {
                   widget.person.fullName,
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontFamily: widget.fontFamily,
-                    fontSize: widget.fontSize,
+                    fontFamily: widget.person.fontFamily,
+                    fontSize: widget.person.fontSize,
+                    color: widget.person.textColor,
                     fontWeight: FontWeight.bold,
-                    color: widget.nameColor,
                   ),
                 ),
-                SizedBox(height: 4),
                 Text(
                   widget.person.dob,
+                  textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontFamily: widget.fontFamily,
-                    fontSize: (widget.fontSize - 2).clamp(6.0, widget.fontSize),
-                    color: widget.dateColor,
+                    fontFamily: widget.person.fontFamily,
+                    fontSize: max(8, widget.person.fontSize - 2),
+                    color: widget.person.textColor,
                   ),
                 ),
               ],

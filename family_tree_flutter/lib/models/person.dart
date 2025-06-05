@@ -1,17 +1,45 @@
+// lib/models/person.dart
 import 'dart:ui';
+import 'package:json_annotation/json_annotation.dart';
 
+part 'person.g.dart';
+
+@JsonSerializable()
 class Person {
   String id;
   String name;
   String surname;
   String birthName;
-  String fatherName; // Just a string field for convenience; not used in connector logic
+  String fatherName;
   String dob;
-  String gender;
+  String gender; // 'male' / 'female' / 'unknown'
   String? motherId;
   String? fatherId;
   String? spouseId;
+
+  // screen position of the circle
+  @JsonKey(fromJson: _offsetFromJson, toJson: _offsetToJson)
   Offset position;
+
+  // circle color
+  @JsonKey(
+    fromJson: _colorFromJson,
+    toJson: _colorToJson,
+  )
+  Color circleColor;
+
+  // text color (for name/dob)
+  @JsonKey(
+    fromJson: _colorFromJson,
+    toJson: _colorToJson,
+  )
+  Color textColor;
+
+  // fontFamily
+  String fontFamily;
+
+  // fontSize (in pixels)
+  double fontSize;
 
   Person({
     required this.id,
@@ -25,65 +53,24 @@ class Person {
     this.fatherId,
     this.spouseId,
     required this.position,
+    required this.circleColor,
+    required this.textColor,
+    required this.fontFamily,
+    required this.fontSize,
   });
 
   String get fullName => '$name $surname';
 
-  /// Convert Person to a JSON‐compatible map.
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'name': name,
-      'surname': surname,
-      'birthName': birthName,
-      'fatherName': fatherName,
-      'dob': dob,
-      'gender': gender,
-      'motherId': motherId,
-      'fatherId': fatherId,
-      'spouseId': spouseId,
-      'position': {
-        'dx': position.dx,
-        'dy': position.dy,
-      },
-    };
-  }
+  factory Person.fromJson(Map<String, dynamic> json) =>
+      _$PersonFromJson(json);
+  Map<String, dynamic> toJson() => _$PersonToJson(this);
 
-  /// Reconstruct a Person from a Map (the inverse of toJson).
-  static Person fromJson(Map<String, dynamic> m) {
-    final posMap = m['position'] as Map<String, dynamic>;
-    return Person(
-      id: m['id'] as String,
-      name: m['name'] as String,
-      surname: m['surname'] as String,
-      birthName: m['birthName'] as String,
-      fatherName: m['fatherName'] as String,
-      dob: m['dob'] as String,
-      gender: m['gender'] as String,
-      motherId: (m['motherId'] as String?)?.isNotEmpty == true ? (m['motherId'] as String) : null,
-      fatherId: (m['fatherId'] as String?)?.isNotEmpty == true ? (m['fatherId'] as String) : null,
-      spouseId: (m['spouseId'] as String?)?.isNotEmpty == true ? (m['spouseId'] as String) : null,
-      position: Offset(
-        (posMap['dx'] as num).toDouble(),
-        (posMap['dy'] as num).toDouble(),
-      ),
-    );
-  }
+  // Helpers to (de)serialize Offset <-> [x, y]
+  static Offset _offsetFromJson(List<double> coords) =>
+      Offset(coords[0], coords[1]);
+  static List<double> _offsetToJson(Offset o) => [o.dx, o.dy];
 
-  /// Create a deep copy (used for undo history).
-  Person copy() {
-    return Person(
-      id: id,
-      name: name,
-      surname: surname,
-      birthName: birthName,
-      fatherName: fatherName,
-      dob: dob,
-      gender: gender,
-      motherId: motherId,
-      fatherId: fatherId,
-      spouseId: spouseId,
-      position: Offset(position.dx, position.dy),
-    );
-  }
+  // Helpers to (de)serialize Color <-> ARGB int
+  static Color _colorFromJson(int argb) => Color(argb);
+  static int _colorToJson(Color c) => c.value;
 }
