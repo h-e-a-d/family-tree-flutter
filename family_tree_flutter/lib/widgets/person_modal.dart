@@ -45,11 +45,13 @@ Future<void> showPersonModal({
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // First Name
+              // Given Name
               TextField(
                 controller: nameController,
                 decoration: InputDecoration(labelText: 'Given Name'),
               ),
+
+              SizedBox(height: 12),
 
               // Surname
               TextField(
@@ -57,17 +59,23 @@ Future<void> showPersonModal({
                 decoration: InputDecoration(labelText: 'Surname'),
               ),
 
+              SizedBox(height: 12),
+
               // Birth Name
               TextField(
                 controller: birthNameController,
                 decoration: InputDecoration(labelText: 'Birth Name'),
               ),
 
-              // Father’s Name (free‐text, not the same as “Father” dropdown)
+              SizedBox(height: 12),
+
+              // Father's Name (free‐text, not the same as “Father” dropdown)
               TextField(
                 controller: fatherNameController,
                 decoration: InputDecoration(labelText: "Father’s Name"),
               ),
+
+              SizedBox(height: 12),
 
               // Date of Birth
               TextField(
@@ -83,32 +91,40 @@ Future<void> showPersonModal({
                 alignment: Alignment.centerLeft,
                 child: Text(
                   'Enter full date (dd.mm.yyyy) or just year (yyyy)',
-                  style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.grey[600]),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontStyle: FontStyle.italic,
+                    color: Colors.grey[600],
+                  ),
                 ),
               ),
 
-              SizedBox(height: 12),
+              SizedBox(height: 16),
 
-              // Gender dropdown
-              DropdownButtonFormField<String>(
+              // Gender dropdown (allows null so we can show "Select Gender")
+              DropdownButtonFormField<String?>(
                 value: gender.isEmpty ? null : gender,
                 decoration: InputDecoration(labelText: 'Gender'),
                 items: <String?>[null, 'male', 'female']
                     .map((g) => DropdownMenuItem<String?>(
                           value: g,
-                          child: Text(g == null ? 'Select Gender' : g),
+                          child: Text(
+                            g == null
+                                ? 'Select Gender'
+                                : (g[0].toUpperCase() + g.substring(1)),
+                          ),
                         ))
                     .toList(),
                 onChanged: (value) => gender = value ?? '',
                 validator: (value) {
                   if (value == null || value.isEmpty) {
-                    return 'Please select gender';
+                    return 'Please select a gender';
                   }
                   return null;
                 },
               ),
 
-              SizedBox(height: 12),
+              SizedBox(height: 16),
 
               // Mother dropdown
               DropdownButtonFormField<String?>(
@@ -124,7 +140,7 @@ Future<void> showPersonModal({
                 onChanged: (value) => selectedMotherId = value,
               ),
 
-              SizedBox(height: 12),
+              SizedBox(height: 16),
 
               // Father dropdown
               DropdownButtonFormField<String?>(
@@ -140,7 +156,7 @@ Future<void> showPersonModal({
                 onChanged: (value) => selectedFatherId = value,
               ),
 
-              SizedBox(height: 12),
+              SizedBox(height: 16),
 
               // Spouse dropdown
               DropdownButtonFormField<String?>(
@@ -170,7 +186,7 @@ Future<void> showPersonModal({
           // Save button
           ElevatedButton(
             onPressed: () {
-              // Validate that at least the required fields are set
+              // Basic validation: require Given Name and Gender
               if (nameController.text.trim().isEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text('Given Name cannot be empty')),
