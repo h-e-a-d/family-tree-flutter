@@ -1,23 +1,29 @@
 name: family_tree_flutter
-description: A Flutter app for building and exporting/importing a family tree.
-publish_to: "none"
+description: A family tree builder Flutter app
+publish_to: "none" # this is a private app
 version: 1.0.0+1
 
 environment:
   sdk: ">=2.17.0 <3.0.0"
-  flutter: ">=3.0.0"
 
 dependencies:
   flutter:
     sdk: flutter
 
-  # UI and utilities
-  flutter_hsvcolor_picker: ^1.5.1       # For HSV-based color picking
-  lucid_color_picker: ^1.0.5             # For a palette-based color picker
-  file_picker: ^5.2.2                   # To import JSON files
-  path_provider: ^2.0.14                # To get application directories
-  screenshot: ^1.5.3                    # To capture a widget for PNG export
-  vector_math: ^2.2.0                   # For math utilities (e.g. Matrix4, etc.)
+  # State management (simple Provider)
+  provider: ^6.0.5
+
+  # A color picker (Lucid/HSL style)
+  flutter_hsvcolor_picker: ^1.5.1
+
+  # Widget screenshotting (for PNG/PDF export)
+  screenshot: ^2.1.0
+
+  # Basic math utilities (for Matrix4, etc.)
+  vector_math: ^2.2.0
+
+  # JSON serialization (built‐in)
+  # (no extra deps needed)
 
 dev_dependencies:
   flutter_test:
@@ -26,3 +32,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  # If you have any assets (e.g. a custom font file, etc.), list them here.
+  # For now, we assume no extra asset files aside from code.
