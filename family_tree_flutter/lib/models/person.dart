@@ -1,79 +1,83 @@
-// lib/models/person.dart
-
 import 'dart:ui';
 
 class Person {
   String id;
-  String givenName;
-  String fatherName;
+  String name;
   String surname;
   String birthName;
+  String fatherName;
   String dob;
   String gender;
   String? motherId;
+  String? fatherId;
   String? spouseId;
   Offset position;
-  double circleRadius;
-  double fontSize;
+  double circleSize;
   Color circleColor;
-  Color textColor;
+  Color fontColor;
+  double fontSize;
 
   Person({
     required this.id,
-    required this.givenName,
-    required this.fatherName,
+    required this.name,
     required this.surname,
     required this.birthName,
+    required this.fatherName,
     required this.dob,
     required this.gender,
     this.motherId,
+    this.fatherId,
     this.spouseId,
     required this.position,
-    this.circleRadius = 30,
-    this.fontSize = 14,
+    this.circleSize = 40.0,
     this.circleColor = const Color(0xFF90CAF9),
-    this.textColor = const Color(0xFF000000),
+    this.fontColor = Colors.black,
+    this.fontSize = 14.0,
   });
 
-  String get fullName => '$givenName $surname';
+  String get fullName => '$name $surname';
 
+  /// Convert to JSON for export.
   Map<String, dynamic> toJson() => {
         'id': id,
-        'givenName': givenName,
-        'fatherName': fatherName,
+        'name': name,
         'surname': surname,
         'birthName': birthName,
+        'fatherName': fatherName,
         'dob': dob,
         'gender': gender,
         'motherId': motherId,
+        'fatherId': fatherId,
         'spouseId': spouseId,
-        'positionX': position.dx,
-        'positionY': position.dy,
-        'circleRadius': circleRadius,
-        'fontSize': fontSize,
+        'position': {'dx': position.dx, 'dy': position.dy},
+        'circleSize': circleSize,
         'circleColor': circleColor.value,
-        'textColor': textColor.value,
+        'fontColor': fontColor.value,
+        'fontSize': fontSize,
       };
 
-  factory Person.fromJson(Map<String, dynamic> json) {
+  /// Create from JSON (import).
+  factory Person.fromJson(Map<String, dynamic> m) {
+    final posMap = m['position'] as Map<String, dynamic>;
     return Person(
-      id: json['id'],
-      givenName: json['givenName'],
-      fatherName: json['fatherName'],
-      surname: json['surname'],
-      birthName: json['birthName'],
-      dob: json['dob'],
-      gender: json['gender'],
-      motherId: json['motherId'],
-      spouseId: json['spouseId'],
+      id: m['id'],
+      name: m['name'],
+      surname: m['surname'],
+      birthName: m['birthName'],
+      fatherName: m['fatherName'],
+      dob: m['dob'],
+      gender: m['gender'],
+      motherId: m['motherId'],
+      fatherId: m['fatherId'],
+      spouseId: m['spouseId'],
       position: Offset(
-        (json['positionX'] as num).toDouble(),
-        (json['positionY'] as num).toDouble(),
+        (posMap['dx'] as num).toDouble(),
+        (posMap['dy'] as num).toDouble(),
       ),
-      circleRadius: (json['circleRadius'] as num).toDouble(),
-      fontSize: (json['fontSize'] as num).toDouble(),
-      circleColor: Color(json['circleColor']),
-      textColor: Color(json['textColor']),
+      circleSize: (m['circleSize'] as num).toDouble(),
+      circleColor: Color((m['circleColor'] as num).toInt()),
+      fontColor: Color((m['fontColor'] as num).toInt()),
+      fontSize: (m['fontSize'] as num).toDouble(),
     );
   }
 }

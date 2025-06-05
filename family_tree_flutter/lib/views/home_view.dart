@@ -1,541 +1,671 @@
-// lib/views/home_view.dart
-
 import 'dart:convert';
-import 'dart:io';
-import 'dart:math' as math;
+import 'dart:html' as html; // for web file upload/download
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_hsvcolor_picker/flutter_hsvcolor_picker.dart'; // Unused now, but kept if needed
-import 'package:lucid_color_picker/lucid_color_picker.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:screenshot/screenshot.dart';
-
+import 'package:path_provider/path_provider.dart'; // for mobile JSON import/export
+import 'package:uuid/uuid.dart';
 import '../models/person.dart';
 import '../widgets/person_node.dart';
+import '../widgets/connector_line.dart';
 
+///
+/// The main “canvas” view, containing:
+///  - A RepaintBoundary‐wrapped Stack for all PersonNodes & ConnectorLines
+///  - Top‐right “+” button to add a new Person at canvas center
+///  - Undo, To Front, Color/Font controls shown when a circle is selected
+///  - JSON Export/Import buttons
+///
 class HomeView extends StatefulWidget {
-  const HomeView({Key? key}) : super(key: key);
-
   @override
-  State<HomeView> createState() => _HomeViewState();
+  _HomeViewState createState() => _HomeViewState();
 }
 
-class _HomeViewState extends State<HomeView> with SingleTickerProviderStateMixin {
-  // List of all people
+class _HomeViewState extends State<HomeView> {
+  final GlobalKey _canvasKey = GlobalKey();
+  final uuid = Uuid();
+
+  // All persons
   List<Person> _people = [];
 
-  // For undo stack: we store deep copies of the _people + relationships
-  final List<String> _undoStack = [];
+  // History stack for “undo”
+  final List<List<Person>> _history = [];
 
-  // Relationships: mother-child and spouse pairs by IDs
-  // We only track mother-child edges and spouse edges
-  List<Map<String, String>> _motherChildEdges = [];
-  List<Map<String, String>> _spouseEdges = [];
+  // Currently selected Person id
+  String? _selectedId;
 
-  // Currently selected person
-  Person? _selectedPerson;
-
-  // To toggle connect-mode: user taps two circles to make a relation
+  // Are we in “connect mode”?
   bool _connectMode = false;
-  Person? _firstConnectPerson;
+  String? _firstConnectId;
 
-  // Keys for screenshot & scrollbar zooming
-  final ScreenshotController _screenshotController = ScreenshotController();
-
-  // Controllers for pan & zoom
-  late TransformationController _transformationController;
-  TapDownDetails? _doubleTapDetails;
+  // Pan & zoom
+  final TransformationController _transformationController =
+      TransformationController();
+  late final ui.ViewportBoundary _vpBoundary;
 
   @override
   void initState() {
     super.initState();
-    _transformationController = TransformationController();
-    // Initialize with one default person
-    _addPersonAt(centerOfCanvas: true);
+    // No need to set vpBoundary manually; we’ll use InteractiveViewer.
   }
 
-  // Save current state (JSON string) to undo stack
-  void _pushUndoStack() {
-    final snapshot = {
-      'people': _people.map((p) => p.toJson()).toList(),
-      'motherChild': _motherChildEdges,
-      'spouse': _spouseEdges,
-    };
-    _undoStack.add(jsonEncode(snapshot));
-    if (_undoStack.length > 20) {
-      _undoStack.removeAt(0);
+  // Push a deep‐copied snapshot into history
+  void _pushHistory() {
+    final snapshot = _people
+        .map((p) => Person.fromJson(p.toJson()))
+        .toList();
+    _history.add(snapshot);
+    if (_history.length > 50) {
+      // cap undo‐stack at 50
+      _history.removeAt(0);
     }
   }
 
-  // Undo action
+  // Undo to previous state
   void _undo() {
-    if (_undoStack.isEmpty) return;
-    final lastSnapshot = _undoStack.removeLast();
-    final decoded = jsonDecode(lastSnapshot) as Map<String, dynamic>;
-
-    final peopleJson = (decoded['people'] as List<dynamic>).cast<Map<String, dynamic>>();
-    final motherChildJson = (decoded['motherChild'] as List<dynamic>).cast<Map<String, dynamic>>();
-    final spouseJson = (decoded['spouse'] as List<dynamic>).cast<Map<String, dynamic>>();
-
+    if (_history.isEmpty) return;
     setState(() {
-      _people = peopleJson.map((j) => Person.fromJson(j)).toList();
-      _motherChildEdges = motherChildJson.cast<Map<String, String>>();
-      _spouseEdges = spouseJson.cast<Map<String, String>>();
-      _selectedPerson = null;
+      _people = _history.removeLast();
+      _selectedId = null;
+      _connectMode = false;
+      _firstConnectId = null;
     });
   }
 
-  // Bring selected person to front
+  // Bring selected Person to front (end of list → drawn last)
   void _bringToFront() {
-    if (_selectedPerson == null) return;
-    _pushUndoStack();
-    setState(() {
-      final p = _selectedPerson!;
-      _people.removeWhere((x) => x.id == p.id);
-      _people.add(p);
-    });
+    if (_selectedId == null) return;
+    final idx = _people.indexWhere((p) => p.id == _selectedId);
+    if (idx == -1) return;
+    final person = _people.removeAt(idx);
+    _people.add(person);
+    setState(() {});
   }
 
-  // Add a new Person at center or random location
-  void _addPersonAt({bool centerOfCanvas = false}) {
-    _pushUndoStack();
-    final id = 'p${DateTime.now().millisecondsSinceEpoch}';
-    Offset pos;
-    if (centerOfCanvas) {
-      final size = MediaQuery.of(context).size;
-      pos = Offset(size.width / 2, size.height / 2 - 80);
-    } else {
-      pos = Offset(100 + _people.length * 10.0, 100 + _people.length * 10.0);
-    }
+  // Add a new person at canvas center
+  void _addPerson() {
+    _pushHistory();
+    // Compute canvas center in global coordinates
+    final matrix = _transformationController.value;
+    final renderBox =
+        _canvasKey.currentContext!.findRenderObject() as RenderBox;
+    final size = renderBox.size;
+    final centerLocal = Offset(size.width / 2, size.height / 2);
+    // Invert the matrix to map viewport→canvas coordinates
+    final inv = Matrix4.inverted(matrix);
+    final c = inv.transform3(Vector3(centerLocal.dx, centerLocal.dy, 0));
+    final pos = Offset(c.x, c.y);
     final newPerson = Person(
-      id: id,
-      givenName: 'First',
-      fatherName: '',
-      surname: 'Last',
+      id: uuid.v4(),
+      name: '',
+      surname: '',
       birthName: '',
+      fatherName: '',
       dob: '',
-      gender: 'unknown',
-      motherId: null,
-      spouseId: null,
+      gender: '',
       position: pos,
     );
+    _people.add(newPerson);
     setState(() {
-      _people.add(newPerson);
-      _selectedPerson = newPerson;
+      _selectedId = newPerson.id;
+    });
+    // Immediately open edit modal on the new person
+    WidgetsBinding.instance!.addPostFrameCallback((_) {
+      _openModalFor(newPerson.id);
     });
   }
 
-  // Delete selected person & all related edges
-  void _deleteSelected() {
-    if (_selectedPerson == null) return;
-    _pushUndoStack();
-    final toRemove = _selectedPerson!;
+  // Select or unselect
+  void _selectPerson(String? id) {
     setState(() {
-      _people.removeWhere((p) => p.id == toRemove.id);
-      _motherChildEdges.removeWhere(
-          (edge) => edge['mother'] == toRemove.id || edge['child'] == toRemove.id);
-      _spouseEdges.removeWhere((edge) =>
-          edge['spouse1'] == toRemove.id || edge['spouse2'] == toRemove.id);
-      _selectedPerson = null;
+      if (_selectedId == id) {
+        _selectedId = null;
+      } else {
+        _selectedId = id;
+      }
+      // Exiting connect mode if someone reselects
+      if (_selectedId != null && _connectMode) {
+        _connectMode = false;
+        _firstConnectId = null;
+      }
     });
   }
 
-  // Toggle connect mode
-  void _toggleConnectMode() {
+  // Connect mode tapped
+  void _startConnect() {
+    if (_selectedId == null) return;
     setState(() {
-      _connectMode = !_connectMode;
-      _firstConnectPerson = null;
+      if (_connectMode) {
+        // if already in connect mode, cancel it
+        _connectMode = false;
+        _firstConnectId = null;
+      } else {
+        _connectMode = true;
+        _firstConnectId = _selectedId;
+      }
     });
   }
 
-  // Handle tapping on a person when in connect mode
-  void _handleConnectTap(Person tapped) {
-    if (!_connectMode) return;
-    if (_firstConnectPerson == null) {
-      _firstConnectPerson = tapped;
-    } else if (_firstConnectPerson!.id != tapped.id) {
-      // Determine relationship type via dialogs
-      showDialog<String>(
-        context: context,
-        builder: (ctx) {
-          return AlertDialog(
-            title: Text('Choose relationship'),
-            content: Text(
-                'Tap “Mother-Child” if the first person is the mother of the second, or “Spouse” if they are spouses.'),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.of(ctx).pop('motherChild');
-                },
-                child: Text('Mother-Child'),
-              ),
-              TextButton(
-                onPressed: () {
-                  Navigator.of(ctx).pop('spouse');
-                },
-                child: Text('Spouse'),
-              ),
-            ],
-          );
-        },
-      ).then((relationType) {
-        if (relationType == 'motherChild') {
-          _pushUndoStack();
-          setState(() {
-            _motherChildEdges.add({
-              'mother': _firstConnectPerson!.id,
-              'child': tapped.id,
-            });
-          });
-        } else if (relationType == 'spouse') {
-          _pushUndoStack();
-          setState(() {
-            _spouseEdges.add({
-              'spouse1': _firstConnectPerson!.id,
-              'spouse2': tapped.id,
-            });
-          });
-        }
-        _firstConnectPerson = null;
+  // Complete a connection between two circles
+  void _completeConnect(String otherId) {
+    if (!_connectMode || _firstConnectId == null) return;
+    if (_firstConnectId == otherId) {
+      // cannot connect to itself
+      setState(() {
+        _connectMode = false;
+        _firstConnectId = null;
       });
+      return;
     }
-  }
+    _pushHistory();
+    final p1 = _people.firstWhere((p) => p.id == _firstConnectId);
+    final p2 = _people.firstWhere((p) => p.id == otherId);
 
-  // Export to JSON (downloads a file)
-  Future<void> _exportToJson() async {
-    final snapshot = {
-      'people': _people.map((p) => p.toJson()).toList(),
-      'motherChild': _motherChildEdges,
-      'spouse': _spouseEdges,
-    };
-    final jsonString = jsonEncode(snapshot);
-
-    // Write to a temporary file, then open share dialog (web will trigger download)
-    final directory = await getTemporaryDirectory();
-    final file = File('${directory.path}/family_tree_export.json');
-    await file.writeAsString(jsonString);
-
-    // On Web, FilePicker is not needed – use AnchorElement trick
-    if (kIsWeb) {
-      final bytes = utf8.encode(jsonString);
-      final blob = html.Blob([bytes], 'application/json');
-      final url = html.Url.createObjectUrlFromBlob(blob);
-      final anchor = html.AnchorElement(href: url)
-        ..setAttribute('download', 'family_tree_export.json')
-        ..click();
-      html.Url.revokeObjectUrl(url);
+    // Decide relation: if genders opposite → parent-child
+    // For simplicity: if p1.gender == 'male', then p1 is father of p2. etc.
+    // Here we’ll simply set p2.fatherId = p1.id if p1.gender=='male'
+    if (p1.gender == 'male') {
+      p2.fatherId = p1.id;
+    } else if (p1.gender == 'female') {
+      p2.motherId = p1.id;
     } else {
-      // On mobile/desktop, just print location (user can open)
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Exported to: ${file.path}')),
-      );
+      // default: spouse relationship
+      p1.spouseId = p2.id;
+      p2.spouseId = p1.id;
     }
-  }
-
-  // Import from JSON (launch file picker)
-  Future<void> _importFromJson() async {
-    _pushUndoStack();
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['json'],
-    );
-    if (result == null) return;
-    final fileBytes = result.files.single.bytes;
-    final uploadedString = utf8.decode(fileBytes!);
-    final decoded = jsonDecode(uploadedString) as Map<String, dynamic>;
-
-    final peopleJson = (decoded['people'] as List<dynamic>).cast<Map<String, dynamic>>();
-    final motherChildJson = (decoded['motherChild'] as List<dynamic>).cast<Map<String, String>>();
-    final spouseJson = (decoded['spouse'] as List<dynamic>).cast<Map<String, String>>();
 
     setState(() {
-      _people = peopleJson.map((j) => Person.fromJson(j)).toList();
-      _motherChildEdges = motherChildJson.toList();
-      _spouseEdges = spouseJson.toList();
-      _selectedPerson = null;
+      _connectMode = false;
+      _firstConnectId = null;
     });
   }
 
-  // Export to PNG via screenshot
-  Future<void> _exportToPng() async {
-    _pushUndoStack();
-    final bytes = await _screenshotController.capture();
-    if (bytes == null) return;
+  // Modify a person in place
+  void _updatePerson(Person edited) {
+    final idx = _people.indexWhere((p) => p.id == edited.id);
+    if (idx == -1) return;
+    _pushHistory();
+    _people[idx] = edited;
+    setState(() {});
+  }
 
+  // Remove a person and any references to it
+  void _deletePerson(String id) {
+    _pushHistory();
+    _people.removeWhere((p) => p.id == id);
+    for (var p in _people) {
+      if (p.motherId == id) p.motherId = null;
+      if (p.fatherId == id) p.fatherId = null;
+      if (p.spouseId == id) p.spouseId = null;
+    }
+    setState(() {
+      if (_selectedId == id) _selectedId = null;
+    });
+  }
+
+  // Export all persons (and relations) as JSON, then trigger download
+  void _exportToJson() {
+    final listMap = _people.map((p) => p.toJson()).toList();
+    final jsonStr = jsonEncode(listMap);
+
+    // On web: use a Blob, then an anchor for download
+    final bytes = utf8.encode(jsonStr);
+    final blob = html.Blob([bytes], 'application/json');
+    final url = html.Url.createObjectUrlFromBlob(blob);
+    final anchor = html.document.createElement('a') as html.AnchorElement
+      ..href = url
+      ..download = 'family_tree_export.json';
+    html.document.body!.append(anchor);
+    anchor.click();
+    anchor.remove();
+    html.Url.revokeObjectUrl(url);
+  }
+
+  // Import JSON: open file picker (web) or native (mobile)
+  Future<void> _importFromJson() async {
     if (kIsWeb) {
-      final blob = html.Blob([bytes], 'image/png');
-      final url = html.Url.createObjectUrlFromBlob(blob);
-      final anchor = html.AnchorElement(href: url)
-        ..setAttribute('download', 'family_tree.png')
-        ..click();
-      html.Url.revokeObjectUrl(url);
+      // Web: use an <input type="file"> from dart:html
+      final input = html.FileUploadInputElement()
+        ..accept = '.json'
+        ..multiple = false;
+      input.click();
+      input.onChange.listen((_) {
+        final file = input.files!.first;
+        final reader = html.FileReader();
+        reader.onLoad.first.then((_) {
+          final content = reader.result as String;
+          final List<dynamic> listMap = jsonDecode(content);
+          final imported = listMap
+              .map((e) => Person.fromJson(e as Map<String, dynamic>))
+              .toList();
+
+          _pushHistory();
+          setState(() {
+            _people = imported;
+            _selectedId = null;
+          });
+        });
+        reader.readAsText(file);
+      });
     } else {
-      final directory = await getTemporaryDirectory();
-      final file = File('${directory.path}/family_tree.png');
-      await file.writeAsBytes(bytes);
+      // Mobile (Android/iOS): pick from local file system
+      try {
+        final directory = await getApplicationDocumentsDirectory();
+        final path = directory.path;
+        // In a real app you’d present a file‐picker UI. For brevity:
+        // We assume a file named “family_tree_import.json” in documents/
+        final file = File('$path/family_tree_import.json');
+        if (!await file.exists()) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('No “family_tree_import.json” found in Documents')),
+          );
+          return;
+        }
+        final content = await file.readAsString();
+        final List<dynamic> listMap = jsonDecode(content);
+        final imported = listMap
+            .map((e) => Person.fromJson(e as Map<String, dynamic>))
+            .toList();
+
+        _pushHistory();
+        setState(() {
+          _people = imported;
+          _selectedId = null;
+        });
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to import: $e')),
+        );
+      }
+    }
+  }
+
+  // Capture canvas and trigger PNG download (web) or save to file (mobile)
+  Future<void> _exportToPng() async {
+    try {
+      final boundary = _canvasKey.currentContext!
+          .findRenderObject() as RenderRepaintBoundary;
+      final image = await boundary.toImage(pixelRatio: 3.0);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      final pngBytes = byteData!.buffer.asUint8List();
+
+      if (kIsWeb) {
+        final blob = html.Blob([pngBytes], 'image/png');
+        final url = html.Url.createObjectUrlFromBlob(blob);
+        final anchor = html.document.createElement('a') as html.AnchorElement
+          ..href = url
+          ..download = 'family_tree.png';
+        html.document.body!.append(anchor);
+        anchor.click();
+        anchor.remove();
+        html.Url.revokeObjectUrl(url);
+      } else {
+        final dir = await getApplicationDocumentsDirectory();
+        final filePath = '${dir.path}/family_tree.png';
+        final file = File(filePath);
+        await file.writeAsBytes(pngBytes);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('PNG saved to $filePath')),
+        );
+      }
+    } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('PNG saved: ${file.path}')),
+        SnackBar(content: Text('Failed to export PNG: $e')),
       );
     }
   }
 
-  // Draw connectors underneath all person nodes
-  Widget _buildConnectorCanvas() {
-    return CustomPaint(
-      size: Size.infinite,
-      painter: _ConnectorPainter(
-        people: _people,
-        motherChildEdges: _motherChildEdges,
-        spouseEdges: _spouseEdges,
-      ),
+  // On double‐tap of blank area, deselect everything and cancel connect
+  void _onBackgroundDoubleTap() {
+    setState(() {
+      _selectedId = null;
+      _connectMode = false;
+      _firstConnectId = null;
+    });
+  }
+
+  // Open edit modal for a given Person ID
+  Future<void> _openModalFor(String id) async {
+    final person = _people.firstWhere((p) => p.id == id);
+    await showPersonModal(
+      context: context,
+      person: person,
+      allPeople: _people,
+      onSave: (edited) => _updatePerson(edited),
     );
   }
 
-  // Main build
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Screenshot(
-        controller: _screenshotController,
-        child: GestureDetector(
-          onDoubleTapDown: (details) {
-            _doubleTapDetails = details;
-          },
-          onDoubleTap: () {
-            // Zoom in on double tap
-            final position = _doubleTapDetails!.localPosition;
-            final double scale = 2.0;
-            final x = -position.dx * (scale - 1);
-            final y = -position.dy * (scale - 1);
-            final zoomed = Matrix4.identity()
-              ..translate(x, y)
-              ..scale(scale);
-            _transformationController.value = zoomed;
-          },
-          child: InteractiveViewer(
-            transformationController: _transformationController,
-            panEnabled: true,
-            scaleEnabled: true,
-            boundaryMargin: EdgeInsets.all(200),
-            minScale: 0.5,
-            maxScale: 3.0,
-            child: Stack(
-              children: [
-                // Grid background
-                CustomPaint(
-                  size: MediaQuery.of(context).size,
-                  painter: _GridPainter(),
-                ),
+      body: SafeArea(
+        child: Stack(
+          children: [
+            // Main canvas area with pan & zoom → 
+            Positioned.fill(
+              child: GestureDetector(
+                onDoubleTap: _onBackgroundDoubleTap,
+                child: InteractiveViewer(
+                  clipBehavior: Clip.none,
+                  panEnabled: true,
+                  scaleEnabled: true,
+                  transformationController: _transformationController,
+                  child: RepaintBoundary(
+                    key: _canvasKey,
+                    child: Stack(
+                      children: [
+                        // Grid background
+                        CustomPaint(
+                          size: Size(2000, 2000),
+                          painter: _GridPainter(),
+                        ),
 
-                // Connector lines
-                _buildConnectorCanvas(),
+                        // Connector lines (parent/child & spouses)
+                        ..._generateConnectorLines(),
 
-                // Person nodes
-                ..._people.map(
-                  (person) => PersonNode(
-                    person: person,
-                    allPeople: _people,
-                    isSelected: _selectedPerson?.id == person.id,
-                    onUpdate: (updated) => setState(() {}),
-                    onSelect: (tapped) {
-                      if (_connectMode) {
-                        _handleConnectTap(tapped);
-                      } else {
-                        setState(() {
-                          _selectedPerson = tapped;
-                        });
-                      }
-                    },
+                        // PersonNodes (in order)
+                        ..._people.map((p) {
+                          return PersonNode(
+                            key: ValueKey(p.id),
+                            person: p,
+                            allPeople: _people,
+                            onUpdate: (edited) => _updatePerson(edited),
+                            onSelect: (selId) {
+                              if (_connectMode && _firstConnectId != null) {
+                                if (selId != null) {
+                                  _completeConnect(selId);
+                                }
+                              } else {
+                                _selectPerson(selId);
+                              }
+                            },
+                          );
+                        }).toList(),
+                      ],
+                    ),
                   ),
                 ),
-              ],
+              ),
             ),
-          ),
+
+            // “+” button (bottom-right)
+            Positioned(
+              bottom: 24,
+              right: 24,
+              child: FloatingActionButton(
+                onPressed: _addPerson,
+                child: Icon(Icons.add),
+              ),
+            ),
+
+            // Top‐left: Undo / To Front / Connect / Export / Import
+            Positioned(
+              top: 16,
+              left: 16,
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: Icon(Icons.undo),
+                    tooltip: 'Undo',
+                    onPressed: _history.isEmpty ? null : _undo,
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.vertical_align_top),
+                    tooltip: 'Bring Selected to Front',
+                    onPressed:
+                        (_selectedId == null) ? null : _bringToFront,
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.compare_arrows),
+                    tooltip: _connectMode ? 'Cancel Connect' : 'Connect',
+                    color: _connectMode ? Colors.orange : null,
+                    onPressed:
+                        (_selectedId == null) ? null : _startConnect,
+                  ),
+                  SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    icon: Icon(Icons.download_outlined),
+                    label: Text('Export JSON'),
+                    onPressed: _people.isEmpty ? null : _exportToJson,
+                  ),
+                  SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    icon: Icon(Icons.upload_outlined),
+                    label: Text('Import JSON'),
+                    onPressed: _importFromJson,
+                  ),
+                  SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    icon: Icon(Icons.image_outlined),
+                    label: Text('Export PNG'),
+                    onPressed: _people.isEmpty ? null : _exportToPng,
+                  ),
+                ],
+              ),
+            ),
+
+            // When a Person is selected, show font/color controls at top‐right
+            if (_selectedId != null) ...[
+              Positioned(
+                top: 16,
+                right: 16,
+                child: _SelectedControls(
+                  person: _people.firstWhere((p) => p.id == _selectedId),
+                  onUpdate: (edited) => _updatePerson(edited),
+                ),
+              ),
+            ],
+          ],
         ),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      floatingActionButton: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Undo
-          FloatingActionButton(
-            heroTag: 'undoBtn',
-            onPressed: _undo,
-            tooltip: 'Undo',
-            backgroundColor: Colors.grey.shade300,
-            child: Icon(Icons.undo, color: Colors.black87),
-          ),
-          SizedBox(height: 8),
-          // Bring to Front
-          FloatingActionButton(
-            heroTag: 'frontBtn',
-            onPressed: _bringToFront,
-            tooltip: 'Bring to Front',
-            backgroundColor: Colors.grey.shade300,
-            child: Icon(Icons.vertical_align_top, color: Colors.black87),
-          ),
-          SizedBox(height: 8),
-          // Connect Mode
-          FloatingActionButton(
-            heroTag: 'connectBtn',
-            onPressed: _toggleConnectMode,
-            tooltip: 'Connect Persons',
-            backgroundColor:
-                _connectMode ? Colors.yellow.shade700 : Colors.grey.shade300,
-            child: Icon(Icons.link, color: Colors.black87),
-          ),
-          SizedBox(height: 8),
-          // Delete Selected
-          FloatingActionButton(
-            heroTag: 'deleteBtn',
-            onPressed: _deleteSelected,
-            tooltip: 'Delete Selected',
-            backgroundColor: Colors.redAccent,
-            child: Icon(Icons.delete, color: Colors.white),
-          ),
-          SizedBox(height: 8),
-          // Export PNG
-          FloatingActionButton(
-            heroTag: 'exportPngBtn',
-            onPressed: _exportToPng,
-            tooltip: 'Export as PNG',
-            backgroundColor: Colors.green.shade600,
-            child: Icon(Icons.image, color: Colors.white),
-          ),
-          SizedBox(height: 8),
-          // Export JSON
-          FloatingActionButton(
-            heroTag: 'exportJsonBtn',
-            onPressed: _exportToJson,
-            tooltip: 'Export to JSON',
-            backgroundColor: Colors.blue.shade700,
-            child: Icon(Icons.download_rounded, color: Colors.white),
-          ),
-          SizedBox(height: 8),
-          // Import JSON
-          FloatingActionButton(
-            heroTag: 'importJsonBtn',
-            onPressed: _importFromJson,
-            tooltip: 'Import from JSON',
-            backgroundColor: Colors.orange.shade600,
-            child: Icon(Icons.upload_file, color: Colors.white),
-          ),
-          SizedBox(height: 8),
-          // Add Person
-          FloatingActionButton(
-            heroTag: 'addBtn',
-            onPressed: () => _addPersonAt(centerOfCanvas: false),
-            tooltip: 'Add Person',
-            backgroundColor: Colors.blueAccent,
-            child: Icon(Icons.add, color: Colors.white),
-          ),
-        ],
       ),
     );
   }
+
+  // Generate connector lines based on parent‐child and spouse relations
+  List<Widget> _generateConnectorLines() {
+    final lines = <Widget>[];
+    for (var p in _people) {
+      // Mother line
+      if (p.motherId != null) {
+        final mom = _people.firstWhere((x) => x.id == p.motherId);
+        lines.add(ConnectorLine(start: mom.position, end: p.position, isSpouse: false));
+      }
+      // Father line
+      if (p.fatherId != null) {
+        final dad = _people.firstWhere((x) => x.id == p.fatherId);
+        lines.add(ConnectorLine(start: dad.position, end: p.position, isSpouse: false));
+      }
+      // Spouse line
+      if (p.spouseId != null) {
+        final s = _people.firstWhere((x) => x.id == p.spouseId);
+        // Only draw if our ID < spouseId to avoid drawing twice
+        if (p.id.compareTo(s.id) < 0) {
+          lines.add(ConnectorLine(start: p.position, end: s.position, isSpouse: true));
+        }
+      }
+    }
+    return lines;
+  }
 }
 
-// Painter for the grid
+///
+/// Draws a light grid background (2000×2000).  Adjust as needed.
+///
 class _GridPainter extends CustomPainter {
-  final double _step = 40;
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
       ..color = Colors.grey.shade300
       ..strokeWidth = 1;
-    for (double x = 0; x < size.width; x += _step) {
+
+    final step = 50.0;
+    for (double x = 0; x <= size.width; x += step) {
       canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
     }
-    for (double y = 0; y < size.height; y += _step) {
+    for (double y = 0; y <= size.height; y += step) {
       canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
     }
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _GridPainter oldDelegate) => false;
 }
 
-// Painter for connectors (mother-child & spouse)
-class _ConnectorPainter extends CustomPainter {
-  final List<Person> people;
-  final List<Map<String, String>> motherChildEdges;
-  final List<Map<String, String>> spouseEdges;
+///
+/// When a circle is selected, show these controls:
+///  - Circle color picker (HSV Popup)
+///  - Font color picker (HSV Popup)
+///  - Font size slider
+///
+class _SelectedControls extends StatelessWidget {
+  final Person person;
+  final Function(Person) onUpdate;
 
-  _ConnectorPainter({
-    required this.people,
-    required this.motherChildEdges,
-    required this.spouseEdges,
+  const _SelectedControls({
+    required this.person,
+    required this.onUpdate,
   });
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final paintChild = Paint()
-      ..color = Colors.grey.shade700
-      ..strokeWidth = 2;
-    final paintSpouse = Paint()
-      ..color = Colors.redAccent
-      ..strokeWidth = 2
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
+  Widget build(BuildContext context) {
+    double fontSize = person.fontSize;
+    Color fontColor = person.fontColor;
+    Color circleColor = person.circleColor;
 
-    // Draw mother-child lines (straight)
-    for (var edge in motherChildEdges) {
-      final mom = people.firstWhereOrNull((p) => p.id == edge['mother']);
-      final child = people.firstWhereOrNull((p) => p.id == edge['child']);
-      if (mom != null && child != null) {
-        canvas.drawLine(
-          mom.position,
-          child.position,
-          paintChild,
-        );
-      }
-    }
+    return Container(
+      padding: EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.85),
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [BoxShadow(blurRadius: 4, color: Colors.black12)],
+      ),
+      child: Column(
+        children: [
+          // Circle Color Picker
+          Row(
+            children: [
+              Text('Circle:'),
+              SizedBox(width: 8),
+              GestureDetector(
+                onTap: () async {
+                  final picked = await showDialog<Color>(
+                    context: context,
+                    builder: (ctx2) {
+                      return AlertDialog(
+                        title: Text('Circle Color'),
+                        content: ColorPicker(
+                          color: circleColor,
+                          onChanged: (c) => circleColor = c,
+                          pickersEnabled: const {
+                            ColorPickerType.hsv: true,
+                            ColorPickerType.wheel: true,
+                            ColorPickerType.hexInput: true,
+                          },
+                        ),
+                        actions: [
+                          TextButton(
+                              onPressed: () => Navigator.of(ctx2).pop(circleColor),
+                              child: Text('Done')),
+                        ],
+                      );
+                    },
+                  );
+                  if (picked != null) {
+                    final updated = Person.fromJson(person.toJson())
+                      ..circleColor = picked;
+                    onUpdate(updated);
+                  }
+                },
+                child: Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    color: circleColor,
+                    shape: BoxShape.circle,
+                    border: Border.all(),
+                  ),
+                ),
+              ),
+            ],
+          ),
 
-    // Draw spouse lines (dashed)
-    for (var edge in spouseEdges) {
-      final p1 = people.firstWhereOrNull((p) => p.id == edge['spouse1']);
-      final p2 = people.firstWhereOrNull((p) => p.id == edge['spouse2']);
-      if (p1 != null && p2 != null) {
-        _drawDashedLine(canvas, p1.position, p2.position, paintSpouse);
-      }
-    }
-  }
+          SizedBox(height: 8),
 
-  // Helper: draw dashed line
-  void _drawDashedLine(Canvas canvas, Offset a, Offset b, Paint paint) {
-    const dashWidth = 6.0;
-    const dashSpace = 4.0;
-    final totalLen = (b - a).distance;
-    final dx = (b.dx - a.dx) / totalLen;
-    final dy = (b.dy - a.dy) / totalLen;
-    double start = 0.0;
-    while (start < totalLen) {
-      final end = math.min(start + dashWidth, totalLen);
-      final x1 = a.dx + dx * start;
-      final y1 = a.dy + dy * start;
-      final x2 = a.dx + dx * end;
-      final y2 = a.dy + dy * end;
-      canvas.drawLine(
-        Offset(x1, y1),
-        Offset(x2, y2),
-        paint,
-      );
-      start += dashWidth + dashSpace;
-    }
-  }
+          // Font Color Picker
+          Row(
+            children: [
+              Text('Font:'),
+              SizedBox(width: 8),
+              GestureDetector(
+                onTap: () async {
+                  final picked = await showDialog<Color>(
+                    context: context,
+                    builder: (ctx2) {
+                      return AlertDialog(
+                        title: Text('Font Color'),
+                        content: ColorPicker(
+                          color: fontColor,
+                          onChanged: (c) => fontColor = c,
+                          pickersEnabled: const {
+                            ColorPickerType.hsv: true,
+                            ColorPickerType.wheel: true,
+                            ColorPickerType.hexInput: true,
+                          },
+                        ),
+                        actions: [
+                          TextButton(
+                              onPressed: () => Navigator.of(ctx2).pop(fontColor),
+                              child: Text('Done')),
+                        ],
+                      );
+                    },
+                  );
+                  if (picked != null) {
+                    final updated = Person.fromJson(person.toJson())
+                      ..fontColor = picked;
+                    onUpdate(updated);
+                  }
+                },
+                child: Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    color: fontColor,
+                    shape: BoxShape.circle,
+                    border: Border.all(),
+                  ),
+                ),
+              ),
+            ],
+          ),
 
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
-}
+          SizedBox(height: 8),
 
-// Extension to find element or return null
-extension FirstWhereOrNullExtension<E> on List<E> {
-  E? firstWhereOrNull(bool Function(E) test) {
-    for (var e in this) {
-      if (test(e)) return e;
-    }
-    return null;
+          // Font size slider
+          Row(
+            children: [
+              Text('Size:'),
+              Expanded(
+                child: Slider(
+                  value: fontSize,
+                  min: 8,
+                  max: 32,
+                  divisions: 12,
+                  label: fontSize.round().toString(),
+                  onChanged: (v) {
+                    fontSize = v;
+                    final updated = Person.fromJson(person.toJson())
+                      ..fontSize = fontSize;
+                    onUpdate(updated);
+                  },
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }
