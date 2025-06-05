@@ -1,17 +1,21 @@
 // lib/views/home_view.dart
 
 import 'dart:convert';
-import 'dart:html' as html;          // For web‐only file import/export
+import 'dart:html' as html;           // For web‐side JSON export/import
 import 'dart:typed_data';
-import 'dart:ui' as ui;             // For RepaintBoundary → toImage()
+import 'dart:ui' as ui;              // For RepaintBoundary → toImage()
 
-import 'package:flutter/foundation.dart'; // for kIsWeb
+import 'package:flutter/foundation.dart';               // for kIsWeb
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';                 // for RenderRepaintBoundary
+import 'package:flutter_hsvcolor_picker/flutter_hsvcolor_picker.dart'; // for ColorPicker
 import 'package:uuid/uuid.dart';
+import 'package:vector_math/vector_math_64.dart' show Vector3, Matrix4;
 
 import '../models/person.dart';
 import '../widgets/person_node.dart';
 import '../widgets/connector_line.dart';
+import '../widgets/person_modal.dart';  // bring in showPersonModal()
 
 ///
 /// The main canvas “Home” screen.  Contains:
@@ -43,23 +47,25 @@ class _HomeViewState extends State<HomeView> {
   String? _firstConnectId;
 
   // Pan & zoom
-  final TransformationController _transformationController = TransformationController();
+  final TransformationController _transformationController =
+      TransformationController();
 
   @override
   void initState() {
     super.initState();
   }
 
-  // Push a snapshot into undo history (deep copy)
+  // Push a snapshot into undo history (deep copy each Person)
   void _pushHistory() {
-    final snapshot = _people.map((p) => Person.fromJson(p.toJson())).toList();
+    final snapshot =
+        _people.map((p) => Person.fromJson(p.toJson())).toList();
     _history.add(snapshot);
     if (_history.length > 50) {
       _history.removeAt(0);
     }
   }
 
-  // Undo
+  // Undo last action
   void _undo() {
     if (_history.isEmpty) return;
     setState(() {
@@ -70,7 +76,7 @@ class _HomeViewState extends State<HomeView> {
     });
   }
 
-  // Bring selected to front (i.e. move to end of _people so it draws last)
+  // Bring selected to front (moves to end of list so it draws on top)
   void _bringToFront() {
     if (_selectedId == null) return;
     final idx = _people.indexWhere((p) => p.id == _selectedId);
@@ -80,17 +86,22 @@ class _HomeViewState extends State<HomeView> {
     setState(() {});
   }
 
-  // Add a new person at the center of the visible viewport
+  // Add a new Person at the center of visible viewport
   void _addPerson() {
     _pushHistory();
-    final renderBox = _canvasKey.currentContext!.findRenderObject() as RenderBox;
+    // Figure out the center of the rendered canvas in global coordinates
+    final renderBox =
+        _canvasKey.currentContext!.findRenderObject() as RenderBox;
     final size = renderBox.size;
     final centerLocal = Offset(size.width / 2, size.height / 2);
-    // Invert the current matrix: visible viewport → canvas coordinates
+
+    // Invert the current transformation to get canvas‐space
     final inv = Matrix4.inverted(_transformationController.value);
-    final vec3 = inv.transform3(Vector3(centerLocal.dx, centerLocal.dy, 0));
+    final vec3 =
+        inv.transform3(Vector3(centerLocal.dx, centerLocal.dy, 0));
     final newPos = Offset(vec3.x, vec3.y);
 
+    // Create a “blank” Person (id = "")
     final newPerson = Person(
       id: '',
       name: '',
@@ -107,7 +118,7 @@ class _HomeViewState extends State<HomeView> {
       _selectedId = '';
     });
 
-    // Immediately open modal for the new person
+    // Immediately open modal for details
     WidgetsBinding.instance!.addPostFrameCallback((_) {
       _openModalFor('');
     });
@@ -121,7 +132,7 @@ class _HomeViewState extends State<HomeView> {
       } else {
         _selectedId = id;
       }
-      // Cancels connect‐mode if active
+      // If we were in connect mode, cancel it
       if (_selectedId != null && _connectMode) {
         _connectMode = false;
         _firstConnectId = null;
@@ -143,10 +154,11 @@ class _HomeViewState extends State<HomeView> {
     });
   }
 
-  // Attempt to form a relation between two tapped circles
+  // When in connect-mode, completing a connection to “otherId”
   void _completeConnect(String otherId) {
     if (!_connectMode || _firstConnectId == null) return;
     if (_firstConnectId == otherId) {
+      // tapped the same circle again → cancel
       setState(() {
         _connectMode = false;
         _firstConnectId = null;
@@ -157,12 +169,13 @@ class _HomeViewState extends State<HomeView> {
     final p1 = _people.firstWhere((p) => p.id == _firstConnectId);
     final p2 = _people.firstWhere((p) => p.id == otherId);
 
-    // If p1.gender is “male” or “female” → parent-child; otherwise spouse
+    // If p1 has a known gender, create parent-child. Otherwise spouse.
     if (p1.gender == 'male') {
       p2.fatherId = p1.id;
     } else if (p1.gender == 'female') {
       p2.motherId = p1.id;
     } else {
+      // spouse
       p1.spouseId = p2.id;
       p2.spouseId = p1.id;
     }
@@ -173,7 +186,7 @@ class _HomeViewState extends State<HomeView> {
     });
   }
 
-  // Update a person in place
+  // Update existing person in place
   void _updatePerson(Person edited) {
     final idx = _people.indexWhere((p) => p.id == edited.id);
     if (idx == -1) return;
@@ -182,7 +195,7 @@ class _HomeViewState extends State<HomeView> {
     setState(() {});
   }
 
-  // Delete a person and clear any references
+  // Delete a person and clear references in others
   void _deletePerson(String id) {
     _pushHistory();
     _people.removeWhere((p) => p.id == id);
@@ -196,7 +209,7 @@ class _HomeViewState extends State<HomeView> {
     });
   }
 
-  // Export JSON (web only)
+  // Export the entire _people to JSON and download (web only)
   void _exportToJson() {
     final listMap = _people.map((p) => p.toJson()).toList();
     final jsonStr = jsonEncode(listMap);
@@ -212,7 +225,7 @@ class _HomeViewState extends State<HomeView> {
     html.Url.revokeObjectUrl(url);
   }
 
-  // Import JSON (web only)
+  // Import JSON (web-only): open file picker, read JSON, replace _people
   Future<void> _importFromJson() async {
     final input = html.FileUploadInputElement()
       ..accept = '.json'
@@ -237,7 +250,7 @@ class _HomeViewState extends State<HomeView> {
     });
   }
 
-  // Export to PNG (web only)
+  // Export current canvas to PNG and download (web-only)
   Future<void> _exportToPng() async {
     try {
       final boundary = _canvasKey.currentContext!
@@ -263,7 +276,7 @@ class _HomeViewState extends State<HomeView> {
     }
   }
 
-  // Deselect and cancel connect on double‐tap of blank area
+  // Double‐tapping blank area should deselect / cancel connect
   void _onBackgroundDoubleTap() {
     setState(() {
       _selectedId = null;
@@ -272,28 +285,30 @@ class _HomeViewState extends State<HomeView> {
     });
   }
 
-  // Open “Edit Person” modal for a given ID (or blank ID for a newly added Person)
+  // Open the “Add/Edit Person” modal for id.  If id == "", it's a newly added Person.
   Future<void> _openModalFor(String id) async {
     Person target;
     if (id.isEmpty) {
-      // Just‐created person has id==""; the Person object in the list also has id==""
+      // Newly added Person has id == "" initially
       target = _people.firstWhere((p) => p.id == "");
     } else {
       target = _people.firstWhere((p) => p.id == id);
     }
+
     await showPersonModal(
       context: context,
       person: target,
       allPeople: _people,
       onSave: (edited) {
-        // If that Person had no ID, assign the new UUID and replace in list
+        // If a brand‐new Person (id==""), assign a new UUID:
         if (edited.id.isEmpty) {
           edited.id = uuid.v4();
         }
         _updatePerson(edited);
       },
     );
-    // After saving, if it was a “new” person, it now has a real id, so if was showing "" as selected, fix:
+
+    // If it was new, now we need to update the selectedId to the real UUID
     if (_selectedId == "") {
       final newId = _people.firstWhere((p) => p.id != "").id;
       setState(() {
@@ -308,7 +323,7 @@ class _HomeViewState extends State<HomeView> {
       body: SafeArea(
         child: Stack(
           children: [
-            // ── Main canvas: InteractiveViewer + RepaintBoundary ──
+            // ─── Main canvas: InteractiveViewer + RepaintBoundary ───
             Positioned.fill(
               child: GestureDetector(
                 onDoubleTap: _onBackgroundDoubleTap,
@@ -364,7 +379,7 @@ class _HomeViewState extends State<HomeView> {
               ),
             ),
 
-            // Top‐left bar: Undo / To Front / Connect / Export/Import JSON / Export PNG
+            // Top‐left toolbar: Undo / To Front / Connect / Export JSON / Import JSON / Export PNG
             Positioned(
               top: 16,
               left: 16,
@@ -380,13 +395,15 @@ class _HomeViewState extends State<HomeView> {
                     IconButton(
                       icon: Icon(Icons.vertical_align_top),
                       tooltip: 'Bring Selected to Front',
-                      onPressed: (_selectedId == null) ? null : _bringToFront,
+                      onPressed:
+                          (_selectedId == null) ? null : _bringToFront,
                     ),
                     IconButton(
                       icon: Icon(Icons.compare_arrows),
                       tooltip: _connectMode ? 'Cancel Connect' : 'Connect',
                       color: _connectMode ? Colors.orange : null,
-                      onPressed: (_selectedId == null) ? null : _startConnect,
+                      onPressed:
+                          (_selectedId == null) ? null : _startConnect,
                     ),
                     SizedBox(width: 8),
                     ElevatedButton.icon(
@@ -413,7 +430,7 @@ class _HomeViewState extends State<HomeView> {
               ),
             ),
 
-            // Top‐right: font/color controls when a circle is selected
+            // Top‐right: if a circle is selected, show font/color controls
             if (_selectedId != null)
               Positioned(
                 top: 16,
@@ -429,7 +446,7 @@ class _HomeViewState extends State<HomeView> {
     );
   }
 
-  // Builds a list of ConnectorLine widgets for every relation
+  // Builds connector lines (vertical) for every parent‐child or spouse relationship
   List<Widget> _generateConnectorLines() {
     final lines = <Widget>[];
     for (var p in _people) {
@@ -443,6 +460,7 @@ class _HomeViewState extends State<HomeView> {
       }
       if (p.spouseId != null) {
         final s = _people.firstWhere((x) => x.id == p.spouseId);
+        // To avoid duplicating the spouse‐dash both ways, only draw if p.id < s.id
         if (p.id.compareTo(s.id) < 0) {
           lines.add(ConnectorLine(from: p, to: s, isSpouse: true));
         }
@@ -537,9 +555,10 @@ class _SelectedControlsState extends State<_SelectedControls> {
                         ),
                         actions: [
                           TextButton(
-                              onPressed: () =>
-                                  Navigator.of(ctx2).pop(circleColor),
-                              child: Text('Done')),
+                            onPressed: () =>
+                                Navigator.of(ctx2).pop(circleColor),
+                            child: Text('Done'),
+                          ),
                         ],
                       );
                     },
@@ -548,8 +567,9 @@ class _SelectedControlsState extends State<_SelectedControls> {
                     setState(() {
                       circleColor = picked;
                     });
-                    final updated = Person.fromJson(widget.person.toJson())
-                      ..circleColor = circleColor;
+                    final updated =
+                        Person.fromJson(widget.person.toJson())
+                          ..circleColor = circleColor;
                     widget.onUpdate(updated);
                   }
                 },
@@ -586,9 +606,9 @@ class _SelectedControlsState extends State<_SelectedControls> {
                         ),
                         actions: [
                           TextButton(
-                              onPressed: () =>
-                                  Navigator.of(ctx2).pop(fontColor),
-                              child: Text('Done')),
+                            onPressed: () => Navigator.of(ctx2).pop(fontColor),
+                            child: Text('Done'),
+                          ),
                         ],
                       );
                     },
@@ -597,8 +617,9 @@ class _SelectedControlsState extends State<_SelectedControls> {
                     setState(() {
                       fontColor = picked;
                     });
-                    final updated = Person.fromJson(widget.person.toJson())
-                      ..fontColor = fontColor;
+                    final updated =
+                        Person.fromJson(widget.person.toJson())
+                          ..fontColor = fontColor;
                     widget.onUpdate(updated);
                   }
                 },
@@ -632,8 +653,9 @@ class _SelectedControlsState extends State<_SelectedControls> {
                     setState(() {
                       fontSize = v;
                     });
-                    final updated = Person.fromJson(widget.person.toJson())
-                      ..fontSize = fontSize;
+                    final updated =
+                        Person.fromJson(widget.person.toJson())
+                          ..fontSize = fontSize;
                     widget.onUpdate(updated);
                   },
                 ),
