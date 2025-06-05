@@ -1,10 +1,7 @@
 // lib/models/person.dart
-import 'dart:ui';
-import 'package:json_annotation/json_annotation.dart';
 
-part 'person.g.dart';
+import 'package:flutter/material.dart';
 
-@JsonSerializable()
 class Person {
   String id;
   String name;
@@ -12,33 +9,16 @@ class Person {
   String birthName;
   String fatherName;
   String dob;
-  String gender; // 'male' / 'female' / 'unknown'
+  String gender;
   String? motherId;
   String? fatherId;
   String? spouseId;
-
-  // screen position of the circle
-  @JsonKey(fromJson: _offsetFromJson, toJson: _offsetToJson)
   Offset position;
 
-  // circle color
-  @JsonKey(
-    fromJson: _colorFromJson,
-    toJson: _colorToJson,
-  )
+  // NEW:
   Color circleColor;
-
-  // text color (for name/dob)
-  @JsonKey(
-    fromJson: _colorFromJson,
-    toJson: _colorToJson,
-  )
   Color textColor;
-
-  // fontFamily
   String fontFamily;
-
-  // fontSize (in pixels)
   double fontSize;
 
   Person({
@@ -61,16 +41,51 @@ class Person {
 
   String get fullName => '$name $surname';
 
-  factory Person.fromJson(Map<String, dynamic> json) =>
-      _$PersonFromJson(json);
-  Map<String, dynamic> toJson() => _$PersonToJson(this);
+  /// Convert to JSON (for export/undo)
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'surname': surname,
+      'birthName': birthName,
+      'fatherName': fatherName,
+      'dob': dob,
+      'gender': gender,
+      'motherId': motherId,
+      'fatherId': fatherId,
+      'spouseId': spouseId,
+      'position': {
+        'dx': position.dx,
+        'dy': position.dy,
+      },
+      'circleColor': circleColor.value,
+      'textColor': textColor.value,
+      'fontFamily': fontFamily,
+      'fontSize': fontSize,
+    };
+  }
 
-  // Helpers to (de)serialize Offset <-> [x, y]
-  static Offset _offsetFromJson(List<double> coords) =>
-      Offset(coords[0], coords[1]);
-  static List<double> _offsetToJson(Offset o) => [o.dx, o.dy];
-
-  // Helpers to (de)serialize Color <-> ARGB int
-  static Color _colorFromJson(int argb) => Color(argb);
-  static int _colorToJson(Color c) => c.value;
+  /// Reconstruct from JSON (for import/undo)
+  factory Person.fromJson(Map<String, dynamic> json) {
+    return Person(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      surname: json['surname'] as String,
+      birthName: json['birthName'] as String,
+      fatherName: json['fatherName'] as String,
+      dob: json['dob'] as String,
+      gender: json['gender'] as String,
+      motherId: json['motherId'] as String?,
+      fatherId: json['fatherId'] as String?,
+      spouseId: json['spouseId'] as String?,
+      position: Offset(
+        (json['position']['dx'] as num).toDouble(),
+        (json['position']['dy'] as num).toDouble(),
+      ),
+      circleColor: Color(json['circleColor'] as int),
+      textColor: Color(json['textColor'] as int),
+      fontFamily: json['fontFamily'] as String,
+      fontSize: (json['fontSize'] as num).toDouble(),
+    );
+  }
 }

@@ -1,24 +1,27 @@
 name: family_tree_flutter
-description: A Flutter-based Family Tree Builder (with connectors, JSON import/export, color/font pickers, undo/bring-to-front, etc.).
-publish_to: 'none'
-version: 1.0.0+1
+description: A Flutter family‐tree builder with pan/zoom, connectors, undo, export/import JSON, and per‐circle color & font controls.
+
+# You’ll need at least Flutter 3.0.0 (stable) or later.
 environment:
-  sdk: ">=2.19.0 <3.0.0"
+  sdk: ">=2.17.0 <3.0.0"
 
 dependencies:
   flutter:
     sdk: flutter
-  # For JSON encoding/decoding
-  json_annotation: ^4.8.0
-  # For file import (on Web we’ll use dart:html directly, so file_picker isn’t strictly required,
-  #  but we include it in case you want native support on Android/iOS later):
-  file_picker: ^5.2.5
+
+  # Lucid‐style HSV Color Picker:
+  flutter_hsvcolor_picker: ^0.1.0
+
+  # (Optional) Provider for state management (not strictly required)
+  provider: ^6.0.0
+
+  # For JSON encoding/decoding (part of Dart core)
+  # No extra dependency needed
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  build_runner: ^2.4.0
-  json_serializable: ^6.6.0
+  flutter_lints: ^2.0.0
 
 flutter:
   uses-material-design: true

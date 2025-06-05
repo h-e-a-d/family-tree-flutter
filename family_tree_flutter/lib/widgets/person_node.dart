@@ -1,5 +1,5 @@
 // lib/widgets/person_node.dart
-import 'dart:math';
+
 import 'package:flutter/material.dart';
 import '../models/person.dart';
 import 'person_modal.dart';
@@ -8,16 +8,18 @@ class PersonNode extends StatefulWidget {
   final Person person;
   final List<Person> allPeople;
   final bool isSelected;
-  final Function(Person) onUpdate;
-  final Function(Person) onSelect;
+  final void Function(Person) onUpdate;     // Called when a person’s data changes (e.g. after drag)
+  final VoidCallback onSelect;              // Called when tapped/double‐tapped
+  final VoidCallback onDragStart;           // Called when the user begins dragging
 
   const PersonNode({
     Key? key,
     required this.person,
     required this.allPeople,
+    required this.isSelected,
     required this.onUpdate,
     required this.onSelect,
-    this.isSelected = false,
+    required this.onDragStart,
   }) : super(key: key);
 
   @override
@@ -36,24 +38,25 @@ class _PersonNodeState extends State<PersonNode> {
   @override
   void didUpdateWidget(covariant PersonNode oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // If external code updated position, reflect it:
-    position = widget.person.position;
+    // If parent updated the person’s position externally, update local state
+    if (widget.person.position != position) {
+      position = widget.person.position;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Circle radius
-    const double radius = 30;
-
     return Positioned(
-      left: position.dx - radius,
-      top: position.dy - radius,
+      left: position.dx - 40,
+      top: position.dy - 40,
+      width: 80,
+      height: 80,
       child: GestureDetector(
         onTap: () {
-          widget.onSelect(widget.person);
+          widget.onSelect();
         },
         onDoubleTap: () async {
-          // Open modal to edit this person
+          // Open Edit Modal
           await showPersonModal(
             context: context,
             person: widget.person,
@@ -62,58 +65,81 @@ class _PersonNodeState extends State<PersonNode> {
               widget.onUpdate(updated);
             },
           );
-          setState(() {}); // redraw text if name/dob changed
+        },
+        onPanStart: (details) {
+          widget.onDragStart(); // only *once* at drag start
         },
         onPanUpdate: (details) {
           setState(() {
             position += details.delta;
             widget.person.position = position;
-            widget.onUpdate(widget.person);
           });
+          // Notify parent that position changed
+          widget.onUpdate(widget.person);
         },
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            // Circle
-            Container(
-              width: radius * 2,
-              height: radius * 2,
-              decoration: BoxDecoration(
-                color: widget.person.circleColor,
-                shape: BoxShape.circle,
-                border: widget.isSelected
-                    ? Border.all(color: Colors.red.shade700, width: 3)
-                    : null,
-              ),
-            ),
-            // Name and DOB
-            Column(
+        child: CustomPaint(
+          size: const Size(80, 80),
+          painter: _CirclePainter(
+            color: widget.person.circleColor,
+            isSelected: widget.isSelected,
+          ),
+          child: Center(
+            child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   widget.person.fullName,
                   textAlign: TextAlign.center,
                   style: TextStyle(
+                    color: widget.person.textColor,
                     fontFamily: widget.person.fontFamily,
                     fontSize: widget.person.fontSize,
-                    color: widget.person.textColor,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
+                const SizedBox(height: 4),
                 Text(
                   widget.person.dob,
-                  textAlign: TextAlign.center,
                   style: TextStyle(
+                    color: widget.person.textColor.withOpacity(0.7),
                     fontFamily: widget.person.fontFamily,
-                    fontSize: max(8, widget.person.fontSize - 2),
-                    color: widget.person.textColor,
+                    fontSize: widget.person.fontSize - 2,
                   ),
                 ),
               ],
             ),
-          ],
+          ),
         ),
       ),
     );
+  }
+}
+
+class _CirclePainter extends CustomPainter {
+  final Color color;
+  final bool isSelected;
+
+  _CirclePainter({required this.color, required this.isSelected});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2;
+
+    final fillPaint = Paint()..color = color;
+    canvas.drawCircle(center, radius, fillPaint);
+
+    if (isSelected) {
+      final borderPaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3
+        ..color = Colors.redAccent;
+      canvas.drawCircle(center, radius - 2, borderPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _CirclePainter old) {
+    return old.color != color || old.isSelected != isSelected;
   }
 }
