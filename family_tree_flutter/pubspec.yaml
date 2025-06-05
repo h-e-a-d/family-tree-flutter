@@ -1,6 +1,7 @@
 name: family_tree_flutter
-description: A family tree builder Flutter app
-publish_to: "none" # this is a private app
+description: A Flutter family tree builder.
+publish_to: "none" # this app is not meant for pub publishing
+
 version: 1.0.0+1
 
 environment:
@@ -10,28 +11,26 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # State management (simple Provider)
-  provider: ^6.0.5
+  # (iOS) Cupertino icons
+  cupertino_icons: ^1.0.2
 
-  # A color picker (Lucid/HSL style)
+  # Color picker widget
   flutter_hsvcolor_picker: ^1.5.1
 
-  # Widget screenshotting (for PNG/PDF export)
-  screenshot: ^2.1.0
+  # Must match Flutter’s own pinned version for flutter_test
+  vector_math: ^2.1.4
 
-  # Basic math utilities (for Matrix4, etc.)
-  vector_math: ^2.2.0
+  # Generate UUIDs for persons
+  uuid: ^3.0.6
 
-  # JSON serialization (built‐in)
-  # (no extra deps needed)
+  # For reading/writing local JSON on mobile (Android/iOS)
+  path_provider: ^2.0.0
+
+  # On web we’ll use `dart:html` directly to trigger downloads.
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^2.0.0
 
 flutter:
   uses-material-design: true
-
-  # If you have any assets (e.g. a custom font file, etc.), list them here.
-  # For now, we assume no extra asset files aside from code.
