@@ -1,19 +1,20 @@
 // lib/widgets/person_modal.dart
 
 import 'package:flutter/material.dart';
-import 'package:flutter_hsvcolor_picker/flutter_hsvcolor_picker.dart';
-import 'package:uuid/uuid.dart';
 import '../models/person.dart';
 
+/// Displays a modal dialog for adding or editing a [Person].
 ///
-/// “Add / Edit Person” modal.  Pop this up to let the user fill in name, DOB, gender, parents, spouse, font & circle styling.
-/// When “Save” is pressed, it calls `onSave(editedPerson)`.
-///
+/// - If [person.id] is empty (""), we treat it as a new Person and assign
+///   a UUID upon saving.
+/// - [allPeople] is the list of existing Person objects, used to populate
+///   the Mother/Father/Spouse dropdowns.
+/// - On Save, we call [onSave] with the edited Person.
 Future<void> showPersonModal({
   required BuildContext context,
   required Person person,
   required List<Person> allPeople,
-  required void Function(Person) onSave,
+  required Function(Person) onSave,
 }) async {
   final nameController = TextEditingController(text: person.name);
   final surnameController = TextEditingController(text: person.surname);
@@ -25,11 +26,15 @@ Future<void> showPersonModal({
   String? selectedMotherId = person.motherId;
   String? selectedFatherId = person.fatherId;
   String? selectedSpouseId = person.spouseId;
-  double fontSize = person.fontSize;
-  Color fontColor = person.fontColor;
-  Color circleColor = person.circleColor;
-  double circleSize = person.circleSize;
-  final uuid = Uuid();
+
+  // Build a list of dropdown items for every other person
+  final dropdownItems = allPeople
+      .where((p) => p.id != person.id)
+      .map((p) => DropdownMenuItem<String?>(
+            value: p.id,
+            child: Text(p.fullName),
+          ))
+      .toList();
 
   await showDialog(
     context: context,
@@ -40,7 +45,7 @@ Future<void> showPersonModal({
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Given Name
+              // First Name
               TextField(
                 controller: nameController,
                 decoration: InputDecoration(labelText: 'Given Name'),
@@ -58,207 +63,139 @@ Future<void> showPersonModal({
                 decoration: InputDecoration(labelText: 'Birth Name'),
               ),
 
-              // Father’s Name (just text input)
+              // Father’s Name (free‐text, not the same as “Father” dropdown)
               TextField(
                 controller: fatherNameController,
-                decoration: InputDecoration(labelText: "Father's Name (text)"),
+                decoration: InputDecoration(labelText: "Father’s Name"),
               ),
 
               // Date of Birth
               TextField(
                 controller: dobController,
-                decoration: InputDecoration(labelText: 'Date of Birth'),
+                decoration: InputDecoration(
+                  labelText: 'Date of Birth',
+                  hintText: 'dd.mm.yyyy or yyyy',
+                ),
+                maxLength: 10,
               ),
+              SizedBox(height: 4),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Enter full date (dd.mm.yyyy) or just year (yyyy)',
+                  style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.grey[600]),
+                ),
+              ),
+
+              SizedBox(height: 12),
 
               // Gender dropdown
               DropdownButtonFormField<String>(
                 value: gender.isEmpty ? null : gender,
                 decoration: InputDecoration(labelText: 'Gender'),
-                onChanged: (v) {
-                  gender = v ?? '';
-                },
-                items: <String>['', 'male', 'female']
-                    .map((g) => DropdownMenuItem(
+                items: <String?>[null, 'male', 'female']
+                    .map((g) => DropdownMenuItem<String?>(
                           value: g,
-                          child: Text(g.isEmpty ? 'None' : g),
+                          child: Text(g == null ? 'Select Gender' : g),
                         ))
                     .toList(),
+                onChanged: (value) => gender = value ?? '',
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please select gender';
+                  }
+                  return null;
+                },
               ),
 
               SizedBox(height: 12),
 
-              // Relation dropdowns:
-              _RelationDropdown(
-                label: 'Mother',
-                allPeople: allPeople,
-                currentId: selectedMotherId,
-                onChanged: (v) => selectedMotherId = v,
-                filterGender: 'female',
-              ),
-              _RelationDropdown(
-                label: 'Father',
-                allPeople: allPeople,
-                currentId: selectedFatherId,
-                onChanged: (v) => selectedFatherId = v,
-                filterGender: 'male',
-              ),
-              _RelationDropdown(
-                label: 'Spouse',
-                allPeople: allPeople,
-                currentId: selectedSpouseId,
-                onChanged: (v) => selectedSpouseId = v,
-                filterGender: 'all',
+              // Mother dropdown
+              DropdownButtonFormField<String?>(
+                value: selectedMotherId,
+                decoration: InputDecoration(labelText: 'Mother'),
+                items: [
+                  DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text('None'),
+                  ),
+                  ...dropdownItems,
+                ],
+                onChanged: (value) => selectedMotherId = value,
               ),
 
               SizedBox(height: 12),
 
-              // Circle size slider
-              Row(
-                children: [
-                  Text('Circle Size'),
-                  Expanded(
-                    child: Slider(
-                      value: circleSize,
-                      min: 20,
-                      max: 100,
-                      divisions: 8,
-                      label: circleSize.round().toString(),
-                      onChanged: (val) => circleSize = val,
-                    ),
+              // Father dropdown
+              DropdownButtonFormField<String?>(
+                value: selectedFatherId,
+                decoration: InputDecoration(labelText: 'Father'),
+                items: [
+                  DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text('None'),
                   ),
+                  ...dropdownItems,
                 ],
-              ),
-
-              // Font size slider
-              Row(
-                children: [
-                  Text('Font Size'),
-                  Expanded(
-                    child: Slider(
-                      value: fontSize,
-                      min: 8,
-                      max: 32,
-                      divisions: 12,
-                      label: fontSize.round().toString(),
-                      onChanged: (val) => fontSize = val,
-                    ),
-                  ),
-                ],
+                onChanged: (value) => selectedFatherId = value,
               ),
 
               SizedBox(height: 12),
 
-              // Circle Color picker
-              Row(
-                children: [
-                  Text('Circle Color'),
-                  SizedBox(width: 12),
-                  GestureDetector(
-                    onTap: () async {
-                      final picked = await showDialog<Color>(
-                        context: context,
-                        builder: (ctx2) {
-                          return AlertDialog(
-                            title: Text('Pick Circle Color'),
-                            content: ColorPicker(
-                              color: circleColor,
-                              onChanged: (c) => circleColor = c,
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.of(ctx2).pop(circleColor),
-                                child: Text('Done'),
-                              ),
-                            ],
-                          );
-                        },
-                      );
-                      if (picked != null) circleColor = picked;
-                    },
-                    child: Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: circleColor,
-                        border: Border.all(),
-                      ),
-                    ),
+              // Spouse dropdown
+              DropdownButtonFormField<String?>(
+                value: selectedSpouseId,
+                decoration: InputDecoration(labelText: 'Spouse'),
+                items: [
+                  DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text('None'),
                   ),
+                  ...dropdownItems,
                 ],
-              ),
-
-              SizedBox(height: 8),
-
-              // Font Color picker
-              Row(
-                children: [
-                  Text('Font Color'),
-                  SizedBox(width: 12),
-                  GestureDetector(
-                    onTap: () async {
-                      final picked = await showDialog<Color>(
-                        context: context,
-                        builder: (ctx2) {
-                          return AlertDialog(
-                            title: Text('Pick Font Color'),
-                            content: ColorPicker(
-                              color: fontColor,
-                              onChanged: (c) => fontColor = c,
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.of(ctx2).pop(fontColor),
-                                child: Text('Done'),
-                              ),
-                            ],
-                          );
-                        },
-                      );
-                      if (picked != null) fontColor = picked;
-                    },
-                    child: Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: fontColor,
-                        border: Border.all(),
-                      ),
-                    ),
-                  ),
-                ],
+                onChanged: (value) => selectedSpouseId = value,
               ),
             ],
           ),
         ),
         actions: [
+          // Cancel button
           TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
+            onPressed: () {
+              Navigator.of(ctx).pop();
+            },
             child: Text('Cancel'),
           ),
+
+          // Save button
           ElevatedButton(
             onPressed: () {
-              // Generate new ID if needed
-              final newId = person.id.isEmpty ? uuid.v4() : person.id;
-              final edited = Person(
-                id: newId,
-                name: nameController.text.trim(),
-                surname: surnameController.text.trim(),
-                birthName: birthNameController.text.trim(),
-                fatherName: fatherNameController.text.trim(),
-                dob: dobController.text.trim(),
-                gender: gender,
-                motherId: selectedMotherId,
-                fatherId: selectedFatherId,
-                spouseId: selectedSpouseId,
-                position: person.position,
-                circleSize: circleSize,
-                circleColor: circleColor,
-                fontColor: fontColor,
-                fontSize: fontSize,
-              );
-              onSave(edited);
+              // Validate that at least the required fields are set
+              if (nameController.text.trim().isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Given Name cannot be empty')),
+                );
+                return;
+              }
+              if (gender.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Please select a gender')),
+                );
+                return;
+              }
+
+              // Commit changes back to the Person object
+              person.name = nameController.text.trim();
+              person.surname = surnameController.text.trim();
+              person.birthName = birthNameController.text.trim();
+              person.fatherName = fatherNameController.text.trim();
+              person.dob = dobController.text.trim();
+              person.gender = gender;
+              person.motherId = selectedMotherId;
+              person.fatherId = selectedFatherId;
+              person.spouseId = selectedSpouseId;
+
+              onSave(person);
               Navigator.of(ctx).pop();
             },
             child: Text('Save'),
@@ -267,51 +204,4 @@ Future<void> showPersonModal({
       );
     },
   );
-}
-
-///
-/// A helper widget that shows a dropdown of `allPeople` filtered by gender,
-/// plus a “None” option. Writes back to `currentId`.
-///
-class _RelationDropdown extends StatelessWidget {
-  final String label;
-  final List<Person> allPeople;
-  final String? currentId;
-  final void Function(String?) onChanged;
-  final String filterGender;
-
-  const _RelationDropdown({
-    required this.label,
-    required this.allPeople,
-    required this.currentId,
-    required this.onChanged,
-    required this.filterGender,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final items = <DropdownMenuItem<String>>[
-      const DropdownMenuItem(value: '', child: Text('None')),
-      ...allPeople.where((p) {
-        if (p.id == currentId) return false;
-        if (filterGender == 'male' && p.gender != 'male') return false;
-        if (filterGender == 'female' && p.gender != 'female') return false;
-        return true;
-      }).map((p) {
-        return DropdownMenuItem(
-          value: p.id,
-          child: Text(p.fullName),
-        );
-      }),
-    ];
-
-    return DropdownButtonFormField<String>(
-      value: currentId ?? '',
-      decoration: InputDecoration(labelText: label),
-      onChanged: (v) {
-        onChanged(v == '' ? null : v);
-      },
-      items: items,
-    );
-  }
 }
