@@ -1,8 +1,9 @@
 // lib/views/home_view.dart
+
 import 'dart:convert';
-import 'dart:html' as html; // For Web-only import/export
+import 'dart:html' as html;             // For Web-only import/export
 import 'package:flutter/material.dart';
-import 'package:vector_math/vector_math_64.dart'; // For Vector3
+import 'package:vector_math/vector_math_64.dart' show Vector3;  // Only Vector3 from vector_math
 import '../models/person.dart';
 import '../widgets/person_node.dart';
 
@@ -17,26 +18,26 @@ class _HomeViewState extends State<HomeView> {
   // All persons in the tree
   final List<Person> _people = [];
 
-  // History stack for Undo (deep copies)
+  // History stack for Undo (stores JSON strings)
   final List<String> _historyStack = [];
 
-  // ID-counter
+  // Auto-incrementing ID counter
   int _nextId = 1;
 
   // Currently selected Person ID (for “Bring to Front” or “Connect”)
   String? _selectedPersonId;
 
-  // Are we in “Connect” mode? (click one circle, click another => link them as parent/child or spouse)
+  // Are we in “Connect” mode?
   bool _connectMode = false;
 
-  // Temporary first‐selected in “Connect” mode
+  // First-picked in “Connect” mode (waiting for second tap)
   String? _firstConnectId;
 
   // Controller for pan/zoom
   final TransformationController _transformController =
       TransformationController();
 
-  // Grid painter
+  // Painter for the background grid
   final GridPainter _gridPainter = GridPainter();
 
   @override
@@ -45,9 +46,11 @@ class _HomeViewState extends State<HomeView> {
     super.dispose();
   }
 
-  // Save current state (JSON) onto historyStack
+  // Save current state onto historyStack
   void _pushHistory() {
-    final jsonString = jsonEncode(_people.map((p) => p.toJson()).toList());
+    final jsonString = jsonEncode(
+      _people.map((p) => p.toJson()).toList(),
+    );
     _historyStack.add(jsonString);
     if (_historyStack.length > 50) {
       _historyStack.removeAt(0);
@@ -66,23 +69,21 @@ class _HomeViewState extends State<HomeView> {
     setState(() {});
   }
 
-  // Add a new person at viewport center
+  // Add a new person at the center of the current viewport
   void _addPerson() {
     _pushHistory();
     final id = 'p${_nextId++}';
 
-    // Compute canvas‐space center by inverse‐transforming the screen center
+    // Find screen-center in Flutter coordinates:
     final screenCenter = Offset(
       MediaQuery.of(context).size.width / 2,
       MediaQuery.of(context).size.height / 2,
     );
-    final matrix = _transformController.value;
-    final v = matrix.transform3(Vector3(
-      screenCenter.dx,
-      screenCenter.dy,
-      0,
-    ));
-    final canvasCenter = Offset(v.x, v.y);
+
+    // Use the 4×4 matrix to map screen coords → canvas coords
+    final m = _transformController.value;
+    final vec = m.transform3(Vector3(screenCenter.dx, screenCenter.dy, 0));
+    final canvasCenter = Offset(vec.x, vec.y);
 
     final newPerson = Person(
       id: id,
@@ -105,33 +106,34 @@ class _HomeViewState extends State<HomeView> {
     setState(() {});
   }
 
-  // Select a person (tap)
+  // Select (tap) a person
   void _selectPerson(Person p) {
     setState(() => _selectedPersonId = p.id);
+
     if (_connectMode) {
       if (_firstConnectId == null) {
-        // Pick the first one
+        // First tap in Connect mode
         _firstConnectId = p.id;
       } else if (_firstConnectId != p.id) {
-        // We have two distinct circles: decide relationship
+        // Second tap: connect these two
         final a = _people.firstWhere((x) => x.id == _firstConnectId);
         final b = p;
-        // If either is already parent/child or spouse, skip
-        if (a.motherId == b.id ||
+        // If already related, do nothing
+        final already =
+            a.motherId == b.id ||
             a.fatherId == b.id ||
             b.motherId == a.id ||
             b.fatherId == a.id ||
-            a.spouseId == b.id) {
-          // Already linked
-        } else {
-          // If genders differ → spouses
+            a.spouseId == b.id;
+        if (!already) {
+          // If genders differ and neither is ‘unknown’, make them spouses
           if (a.gender != 'unknown' &&
               b.gender != 'unknown' &&
               a.gender != b.gender) {
             a.spouseId = b.id;
             b.spouseId = a.id;
           } else {
-            // Otherwise make 'a' the father of 'b'
+            // Otherwise make `a` the father of `b`
             b.fatherId = a.id;
             b.fatherName = a.fullName;
           }
@@ -143,15 +145,15 @@ class _HomeViewState extends State<HomeView> {
     }
   }
 
-  // Draw connector lines between parents & children, and spouses.
+  // Draw connector lines
   Widget _buildConnectorCanvas() {
     return CustomPaint(
-      size: Size.infinite,
+      size: const Size(double.infinity, double.infinity),
       painter: ConnectorPainter(_people),
     );
   }
 
-  // Update a Person (after edit or drag)
+  // Update a person (after edit/drag)
   void _updatePerson(Person updated) {
     final idx = _people.indexWhere((p) => p.id == updated.id);
     if (idx >= 0) {
@@ -160,7 +162,7 @@ class _HomeViewState extends State<HomeView> {
     }
   }
 
-  // Bring selected circle to front
+  // Bring selected circle to front (list’s end)
   void _bringToFront() {
     if (_selectedPersonId == null) return;
     _pushHistory();
@@ -172,7 +174,7 @@ class _HomeViewState extends State<HomeView> {
     }
   }
 
-  // Export current list of people to JSON (Web)
+  // Export current people list as JSON (Web)
   void _exportJson() {
     final jsonString = const JsonEncoder.withIndent('  ')
         .convert(_people.map((p) => p.toJson()).toList());
@@ -188,7 +190,7 @@ class _HomeViewState extends State<HomeView> {
     html.Url.revokeObjectUrl(url);
   }
 
-  // Import JSON (Web)
+  // Import JSON from user‐selected file (Web)
   void _importJson() {
     final uploadInput = html.FileUploadInputElement()..accept = '.json';
     uploadInput.click();
@@ -212,8 +214,7 @@ class _HomeViewState extends State<HomeView> {
           setState(() {});
         } catch (_) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-                content: Text('Invalid JSON file. Cannot import.')),
+            const SnackBar(content: Text('Invalid JSON file. Cannot import.')),
           );
         }
       });
@@ -304,7 +305,6 @@ class _HomeViewState extends State<HomeView> {
           ),
         ],
       ),
-      // “+” button in lower right
       floatingActionButton: FloatingActionButton(
         tooltip: 'Add Person',
         child: const Icon(Icons.add, size: 32),
@@ -359,20 +359,23 @@ class ConnectorPainter extends CustomPainter {
         final mother = people.firstWhere(
             (p) => p.id == child.motherId,
             orElse: () => child);
-        _drawLineBetween(parent: mother, child: child, canvas: canvas, paint: paint);
+        _drawLineBetween(
+            parent: mother, child: child, canvas: canvas, paint: paint);
       }
       if (child.fatherId != null) {
         final father = people.firstWhere(
             (p) => p.id == child.fatherId,
             orElse: () => child);
-        _drawLineBetween(parent: father, child: child, canvas: canvas, paint: paint);
+        _drawLineBetween(
+            parent: father, child: child, canvas: canvas, paint: paint);
       }
       // spouse lines:
       if (child.spouseId != null) {
         final spouse = people.firstWhere(
             (p) => p.id == child.spouseId,
             orElse: () => child);
-        _drawDashedLineBetween(a: child, b: spouse, canvas: canvas, paint: dashPaint);
+        _drawDashedLineBetween(
+            a: child, b: spouse, canvas: canvas, paint: dashPaint);
       }
     }
   }
