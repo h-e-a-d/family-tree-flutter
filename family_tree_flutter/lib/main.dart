@@ -1,4 +1,5 @@
 // lib/main.dart
+
 import 'package:flutter/material.dart';
 import 'views/home_view.dart';
 
@@ -13,10 +14,9 @@ class FamilyTreeApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Family Tree Builder',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
         primarySwatch: Colors.blue,
-        // Default font family
-        fontFamily: 'Arial',
       ),
       home: const HomeView(),
     );
